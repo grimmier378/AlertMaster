@@ -129,7 +129,7 @@ local function SpawnToEntry(spawn, row)
     ID = row,
     MobName = spawn.CleanName(),
     MobZoneName = mq.TLO.Zone.Name,
-    MobDist = math.floor(spawn.Distance()),
+    MobDist = math.floor(spawn.Distance() or 0),
     MobLoc = spawn.Loc(),
     MobID = spawn.ID(), -- If you want to include MobID, keep it here
     MobLvl = spawn.Level(),
@@ -404,13 +404,13 @@ end
 local function buildGui () --Build the Button Rows for the GUI Window
     if zone_id == Zone.ID() then
         for id, spawnData in pairs(spawnAlerts) do
-            if ImGui.Button(spawnData.CleanName() .. " : " .. math.floor(spawnData.Distance())) then
+            if ImGui.Button(spawnData.CleanName() .. " : " .. math.floor(spawnData.Distance() or 0)) then
                 mq.cmd('/nav id ', spawnData.ID())
                 mq.cmdf('/target id %s', spawnData.ID())
             end
             if ImGui.IsItemHovered() then
                 ImGui.BeginTooltip()
-                ImGui.Text("Click to Navigate to " .. spawnData.CleanName() .. " Dist: " ..math.floor(spawnData.Distance()))
+                ImGui.Text("Click to Navigate to " .. spawnData.CleanName() .. " Dist: " ..math.floor(spawnData.Distance() or 0))
                 ImGui.EndTooltip()
             end
         end
@@ -826,7 +826,7 @@ local spawn_search_players = function(search)
                     tmp[name] = { 
                         name = (pc.GM() and '\ag*GM*\ax ' or '')..'\ar'..name..'\ax', 
                         guild = '<\ay'..guild..'\ax>', 
-                        distance = math.floor(pc.Distance()), 
+                        distance = math.floor(pc.Distance() or 0), 
                         time = os.time() 
                     }
                 end
@@ -916,7 +916,7 @@ local check_for_spawns = function()
         if tmp ~= nil then
             for id, v in pairs(tmp) do
                 if tSpawns[id] == nil then
-                    print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance()))..' units away.')
+                    print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
                     tSpawns[id] = v
                     spawnAlerts[id] = v
                     spawnAlertsUpdated = true
