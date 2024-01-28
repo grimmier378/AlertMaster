@@ -26,3 +26,8 @@ Added a GUI and commands.
 * The Alert Popup Window lists the spawns that you are tracking and are alive. Shown as "Name : Distance"
 * Clicking the button on the Alert Window will NavTo the spawn.
 * Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
+
+
+![alt text](https://github.com/grimmier378/AlertMaster/blob/info/searchGui.png)
+
+![alt text](https://github.com/grimmier378/AlertMaster/blob/info/alertGui.png)
