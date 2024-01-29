@@ -44,7 +44,7 @@ local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
 local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true }
 local tSafeZones = {}
-local alertTime = 1
+local alertTime = 0
 -- [[ UI ]] --
 local AlertWindow_Show = false
 local AlertWindowOpen = false
@@ -267,9 +267,9 @@ local function DrawRuleRow(entry)
     end
     ImGui.TableNextColumn()
     ImGui.SameLine()
-    if ImGui.SmallButton("Track##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
+    if ImGui.SmallButton("Add##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
     ImGui.SameLine()
-    if ImGui.SmallButton("Ignore##" .. entry.ID) then CMD('/am spawndel "'..entry.MobName..'"') end
+    if ImGui.SmallButton("Del##" .. entry.ID) then CMD('/am spawndel "'..entry.MobName..'"') end
 end
 local function DrawSearchWindow()
     if SearchWindowOpen then
@@ -706,6 +706,7 @@ local setup = function()
     print_ts('\atLoaded '..settings_file)
     print_ts('\ay/am help for usage')
     print_status()
+    RefreshZone()
 end
 local should_include_player = function(spawn)
     local name = spawn.CleanName()
@@ -752,7 +753,7 @@ local spawn_search_players = function(search)
 end
 local spawn_search_npcs = function()
     local tmp = {}
-    local spawns = settings[Zone.ShortName():lower()]
+    local spawns = settings[Zone.ShortName()]
     if spawns ~= nil then
         for k, v in pairs(spawns) do
             local search = 'npc '..v
@@ -761,7 +762,10 @@ local spawn_search_npcs = function()
                 local spawn = NearestSpawn(i, search)
                 local id = spawn.ID()
                 if spawn ~= nil and id ~= nil then
-                    tmp[id] = spawn
+                     -- Case-sensitive comparison using CleanName for exact matching
+                    if spawn.CleanName() == v then
+                        tmp[id] = spawn
+                    end
                 end
             end
         end
@@ -882,6 +886,7 @@ local check_for_zone_change = function()
         AlertWindowOpen, AlertWindow_Show = false, false
         tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}
         zone_id = Zone.ID()
+        alertTime = 0
     end
 end
 local loop = function()
@@ -898,7 +903,7 @@ local loop = function()
             AlertWindowOpen = true
             DrawAlertGUI()
         end
-        if SearchWindow_Show == true then RefreshZone() end
+        if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
         curZone = TLO.Zone.Name
         if GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
         mq.delay(delay..'s')
