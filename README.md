@@ -4,12 +4,17 @@ https://www.redguides.com/community/threads/alert-master.77146/
 
 2024-Jan-28 Grimmier.
 
-Added a GUI and commands.
+This spawned from combining a side project I was working on to make an LUA tracking window with some features. 
+I was able to get the GUI loading and refreshing, navTo working but hadn't tackled the backend for storing and retrieving the spawns I wanted to search for all the time. I thought about trying to tie the UI with SpawnMaster, then I found AlertMaster.  So mostly for personal use I integrated the UI into AlertMaster, Originally I made them work hand in hand, but wanted to combine them.
 
-** Commands **
+Alas we have this: 
 
-* /am search will toggle the search window.
-* /am ui will toggle the alert popup window.
+** AlertMaster ** with a Search GUI, Alert PopUp's and NavTo abilities for any mob in zone.
+
+** NEW Commands **
+
+* /am show will toggle the search window.
+* /am popup will toggle the alert popup window.
 
 ** Search Window **
 
@@ -21,11 +26,13 @@ Added a GUI and commands.
 * Right-Clicking the name will target the spawn.
 * Columns can be toggled on and off as well as re-arranged in the table.
 
-** Alert Window **
+** Alert PopUp Window **
 
 * The Alert Popup Window lists the spawns that you are tracking and are alive. Shown as "Name : Distance"
 * Clicking the button on the Alert Window will NavTo the spawn.
 * Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
+* If you have remind set in your ini or via /am remind #seconds:
+* The alert window will re-popup if there is something on it after that many seconds since last appearance.
 
 
 ![alt text](https://github.com/grimmier378/AlertMaster/blob/info/searchGui.png)
