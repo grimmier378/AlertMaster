@@ -878,7 +878,7 @@ local check_for_zone_change = function()
     -- if we've changed zones, clear the tables and update current zone id
     if active and (zone_id == nil or zone_id ~= Zone.ID()) then
         AlertWindowOpen, AlertWindow_Show = false, false
-        tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts = {}, {}, {}, {}, {}
+        tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}
         zone_id = Zone.ID()
     end
 end
