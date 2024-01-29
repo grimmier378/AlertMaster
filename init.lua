@@ -47,6 +47,7 @@ local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
 local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true }
 local tSafeZones = {}
+local alertTime = 1
 
 -- [[ UI ]] --
 AlertPopupOpen = false
@@ -129,7 +130,7 @@ local function SpawnToEntry(spawn, row)
     ID = row,
     MobName = spawn.CleanName(),
     MobZoneName = mq.TLO.Zone.Name,
-    MobDist = math.floor(spawn.Distance() or 0),
+    MobDist = math.floor(spawn.Distance()),
     MobLoc = spawn.Loc(),
     MobID = spawn.ID(), -- If you want to include MobID, keep it here
     MobLvl = spawn.Level(),
@@ -215,18 +216,6 @@ local function TableSortSpecs(a, b)
   return a.MobName < b.MobName
 end
 
-local function RefreshRules()
-  Table_Cache.Rules = Database:GetAllRules()
-  local newTable = {}
-  for k,v in ipairs(Table_Cache.Rules) do
-    table.insert(newTable, v.ID, k)
-  end
-  Lookup.Rules = newTable
-  GUI_Main.Refresh.Table.Filtered = true
-  GUI_Main.Refresh.Table.Unhandled = true
-  GUI_Main.Refresh.Table.Rules = false
-end
-
 local function RefreshUnhandled()
   local splitSearch = {}
   for part in string.gmatch(GUI_Main.Search, '[^%s]+') do
@@ -246,18 +235,19 @@ local function RefreshUnhandled()
   end
   Table_Cache.Unhandled = newTable
   GUI_Main.Refresh.Sort.Rules = true
-  GUI_Main.Refresh.Table.Unhandled = false
+  GUI_Main.Refresh.Table.Unhandled = true
 end
 
 local function RefreshZone()
   local newTable = {}
-  local zoneName = mq.TLO.Zone.Name
   local npcs = mq.getFilteredSpawns(function(spawn) return spawn.Type() == 'NPC' end)
+  --CMD("/echo Refreshing Zone Mobs")
   for i = 1, #npcs do
     local spawn = npcs[i]
     if #npcs>0 then InsertTableSpawn(newTable, spawn, i) end
   end
   Table_Cache.Rules = newTable
+  Table_Cache.Mobs = newTable
   GUI_Main.Refresh.Sort.Mobs = true
   GUI_Main.Refresh.Table.Mobs = false
 end
@@ -404,13 +394,13 @@ end
 local function buildGui () --Build the Button Rows for the GUI Window
     if zone_id == Zone.ID() then
         for id, spawnData in pairs(spawnAlerts) do
-            if ImGui.Button(spawnData.CleanName() .. " : " .. math.floor(spawnData.Distance() or 0)) then
+            if ImGui.Button(spawnData.CleanName() .. " : " .. math.floor(spawnData.Distance())) then
                 mq.cmd('/nav id ', spawnData.ID())
                 mq.cmdf('/target id %s', spawnData.ID())
             end
             if ImGui.IsItemHovered() then
                 ImGui.BeginTooltip()
-                ImGui.Text("Click to Navigate to " .. spawnData.CleanName() .. " Dist: " ..math.floor(spawnData.Distance() or 0))
+                ImGui.Text("Click to Navigate to " .. spawnData.CleanName() .. " Dist: " ..math.floor(spawnData.Distance()))
                 ImGui.EndTooltip()
             end
         end
@@ -425,7 +415,11 @@ function DrawAlertGUI() --Draw GUI Window
         if ImGui.SmallButton("X") then
             GUI_AlertOpen = false
             AlertPopupOpen = false
-            spawnAlerts = {}
+            if remind > 0 then
+              alertTime = os.time()
+            else
+              spawnAlerts = {}
+            end
         end
         ImGui.End()
     end
@@ -786,6 +780,7 @@ local setup = function()
     print_ts('\atLoaded '..settings_file)
     print_ts('\ay/am help for usage')
     print_status()
+    RefreshZone()
 end
 
 local should_include_player = function(spawn)
@@ -826,7 +821,7 @@ local spawn_search_players = function(search)
                     tmp[name] = { 
                         name = (pc.GM() and '\ag*GM*\ax ' or '')..'\ar'..name..'\ax', 
                         guild = '<\ay'..guild..'\ax>', 
-                        distance = math.floor(pc.Distance() or 0), 
+                        distance = math.floor(pc.Distance()), 
                         time = os.time() 
                     }
                 end
@@ -916,10 +911,11 @@ local check_for_spawns = function()
         if tmp ~= nil then
             for id, v in pairs(tmp) do
                 if tSpawns[id] == nil then
-                    print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
+                    print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance()))..' units away.')
                     tSpawns[id] = v
                     spawnAlerts[id] = v
                     spawnAlertsUpdated = true
+                    alertTime = os.time()
                 end
             end
             if tSpawns ~= nil then
@@ -978,18 +974,25 @@ end
 
 local loop = function()
     while true do
+      check_for_zone_change()
+      if check_safe_zone() ~= true then
+        check_for_gms()
+        check_for_announce()
+        check_for_pcs()
+        check_for_spawns()
+      end
+      if ((os.time() - alertTime > remind) and AlertPopupOpen == false) then
+        AlertPopupOpen = true
+        GUI_AlertOpen = true
+        DrawAlertGUI()
+      end
+      RefreshZone()
+     -- print_ts("Search Window Open: ".. tostring(GuiMainOpen))
+      if GuiMainOpen == true then RefreshZone() end
+      zoneB = TLO.Zone.Name
+      --if GUI_Main.Refresh.Table.Mobs then RefreshRules() end
+      if GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
       mq.delay(delay..'s')
-        check_for_zone_change()
-        if check_safe_zone() ~= true then
-            check_for_gms()
-            check_for_announce()
-            check_for_pcs()
-            check_for_spawns()
-            RefreshZone()
-        end
-        zoneB = TLO.Zone.Name
-        if GUI_Main.Refresh.Table.Mobs then RefreshRules() end
-        if GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
     end
 end
 
