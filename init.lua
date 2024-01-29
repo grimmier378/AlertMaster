@@ -273,6 +273,7 @@ local function DrawRuleRow(entry)
 end
 local function DrawSearchWindow()
     if SearchWindowOpen then
+        if mq.TLO.Me.Zoning() then return end
         SearchWindowOpen = ImGui.Begin("Alert Master Search Window", SearchWindowOpen, GUI_Main.Flags)
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
         if #Table_Cache.Unhandled > 0 then
@@ -362,6 +363,7 @@ local function BuildAlertRows () --Build the Button Rows for the GUI Window
 end
 function DrawAlertGUI() --Draw GUI Window
     if AlertWindowOpen then
+        if mq.TLO.Me.Zoning() then return end
         AlertWindowOpen, AlertWindow_Show = ImGui.Begin("Alert Window", AlertWindowOpen, ImGuiWindowFlags.None)
         BuildAlertRows()
         -- close button
