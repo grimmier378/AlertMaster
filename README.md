@@ -15,6 +15,13 @@ Alas we have this:
 
 * /am show will toggle the search window.
 * /am popup will toggle the alert popup window.
+* /am beep will toggle on and off beep notifications
+* /am doalert will toggle wether we want to see popup alert windows. default is false
+
+** NEW Settings **
+
+* beep=true|false default is false. turns on or off beep notifications for NPC spawns.
+* popup=true|false default is false. turns on or off popup alert notifications for NPC spawns. You can still /am popup to display the window if you have popup alerts turned off.
 
 ** Search Window **
 
