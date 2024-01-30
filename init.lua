@@ -46,6 +46,7 @@ local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms 
 local tSafeZones = {}
 local alertTime = 0
 local doBeep = false
+
 -- [[ UI ]] --
 local AlertWindow_Show = false
 local AlertWindowOpen = false
@@ -442,7 +443,7 @@ local load_binds = function()
                 print_ts('\ayShowing Search UI.')
             end
         end
-		-- Beep On/Off Toggle
+    		-- Beep On/Off Toggle
         if cmd == 'beep' then
             if doBeep then
                 doBeep = false
@@ -619,7 +620,7 @@ local load_binds = function()
                 print_ts('\ayIgnore List (\a-t'..Me.CleanName()..'\ax): No ignore list configured.')
             end
         end
-		-- Announce Alerts
+    		-- Announce Alerts
         if cmd == 'announce' and val_str == 'on' then
             announce = true
             settings[CharConfig]['announce'] = announce
@@ -631,7 +632,7 @@ local load_binds = function()
             save_settings()
             print_ts('\ayNo longer announcing players entering/exiting the zone.')
         end
-		-- GM Checks
+    		-- GM Checks
         if cmd == 'gm' and val_str == 'on' then
             gms = true
             settings[CharConfig]['gms'] = gms
@@ -643,7 +644,7 @@ local load_binds = function()
             save_settings()
             print_ts('\ayGM Alerts disabled.')
         end
-		-- Status
+    		-- Status
         if cmd == 'status' then print_status() end
         if cmd == nil or cmd == 'help' then
             print_ts('\ayAlert Master Usage:')
@@ -654,7 +655,8 @@ local load_binds = function()
             print_ts('\t\ay/am gm on|off\a-t -- toggle GM alerts')
             print_ts('\t\ay/am pcs on|off\a-t -- toggle PC alerts')
             print_ts('\t\ay/am spawns on|off\a-t -- toggle spawn alerts')
-			print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
+      			print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
+
             print_ts('\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
             print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
             print_ts('\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
@@ -706,7 +708,7 @@ local load_settings = function()
     gms = settings[CharConfig]['gms']
     announce = settings[CharConfig]['announce']
     ignoreguild = settings[CharConfig]['ignoreguild']
-	beep = settings[CharConfig]['beep']
+  	beep = settings[CharConfig]['beep']
     -- setup safe zone "set"
     for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
@@ -923,7 +925,7 @@ local loop = function()
             AlertWindow_Show = true
             AlertWindowOpen = true
             DrawAlertGUI()
-			if doBeep then CMD('/beep') end
+      			if doBeep then CMD('/beep') end
         end
         if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
         curZone = TLO.Zone.Name
