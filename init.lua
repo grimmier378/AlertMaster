@@ -953,9 +953,10 @@ local loop = function()
             if doAlert then
                 AlertWindow_Show = true
                 AlertWindowOpen = true
-                DrawAlertGUI() 
+                DrawAlertGUI()
             end
       		if doBeep then CMD('/beep') end
+            alertTime = os.time()
         end
         if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
         curZone = TLO.Zone.Name
