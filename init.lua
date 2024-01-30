@@ -21,6 +21,7 @@
         * The Alert Popup Window lists the spawns that you are tracking and are alive. Shown as "Name : Distance"
         * Clicking the button on the Alert Window will NavTo the spawn.
         * Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
+        * remind setting is in minutes.
  ]]
 local LIP = require('lib/LIP')
 require('lib/ed/utils')
@@ -388,7 +389,7 @@ end
 local print_ts = function(msg) print(MsgPrefix()..msg) end
 local function print_status()
     print_ts('\ayAlert Status: '..tostring(active and 'on' or 'off'))
-    print_ts('\a-tPCs: \a-y'..tostring(pcs)..'\ax radius: \a-y'..tostring(radius)..'\ax zradius: \a-y'..tostring(zradius)..'\ax delay: \a-y'..tostring(delay)..'s\ax remind: \a-y'..tostring(remind)..'s\ax')
+    print_ts('\a-tPCs: \a-y'..tostring(pcs)..'\ax radius: \a-y'..tostring(radius)..'\ax zradius: \a-y'..tostring(zradius)..'\ax delay: \a-y'..tostring(delay)..'s\ax remind: \a-y'..tostring(remind)..' min\ax')
     print_ts('\a-tAnnounce PCs: \a-y'..tostring(announce)..'\ax')
     print_ts('\a-tSpawns (zone wide): \a-y'..tostring(spawns)..'\ax')
     print_ts('\a-tGMs (zone wide): \a-y'..tostring(gms)..'\ax')
@@ -949,7 +950,7 @@ local loop = function()
         end
         if Me.Zoning() then numAlerts = 0 end
         --CMD('/echo '..numAlerts)
-        if (os.time() - alertTime > remind and AlertWindow_Show == false and numAlerts >0) then
+        if ((os.time() - alertTime) > (remind * 60) and AlertWindow_Show == false and numAlerts >0) then
             if doAlert then
                 AlertWindow_Show = true
                 AlertWindowOpen = true
