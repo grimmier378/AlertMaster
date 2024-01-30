@@ -667,7 +667,7 @@ local load_binds = function()
             print_ts('\t\ay/am pcs on|off\a-t -- toggle PC alerts')
             print_ts('\t\ay/am spawns on|off\a-t -- toggle spawn alerts')
       		print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
-      		print_ts('\t\ay/am doalert on|off\a-t -- toggle Popup alerts')
+      		print_ts('\t\ay/am doalert \a-t -- toggle Popup alerts')
 
             print_ts('\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
             print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
