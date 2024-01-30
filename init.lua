@@ -45,6 +45,9 @@ local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
 local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true }
 local tSafeZones = {}
 local alertTime = 0
+local doBeep = false
+local numAlerts = 0
+
 -- [[ UI ]] --
 local AlertWindow_Show = false
 local AlertWindowOpen = false
@@ -52,12 +55,8 @@ local SearchWindow_Show = false
 local SearchWindowOpen = false
 local Table_Cache = {
     Rules = {},
-    Filtered = {},
     Unhandled = {},
     Mobs = {},
-}
-local Lookup = {
-    Rules = {},
 }
 local GUI_Main = {
     Open  = false,
@@ -315,7 +314,7 @@ local function DrawSearchWindow()
                     ImGui.TableHeadersRow()
                     local sortSpecs = ImGui.TableGetSortSpecs()
                     if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
-                        if #Table_Cache.Unhandled > 1 then
+                        if #Table_Cache.Unhandled > 0 then
                             GUI_Main.Table.SortSpecs = sortSpecs
                             table.sort(Table_Cache.Unhandled, TableSortSpecs)
                             GUI_Main.Table.SortSpecs = nil
@@ -439,6 +438,20 @@ local load_binds = function()
                 SearchWindow_Show = true
                 SearchWindowOpen = true
                 print_ts('\ayShowing Search UI.')
+            end
+        end
+    		-- Beep On/Off Toggle
+        if cmd == 'beep' then
+            if doBeep then
+                doBeep = false
+				settings[CharConfig]['beep'] = doBeep
+				save_settings()
+				print_ts('\ayBeep Alerts Disabled.')
+            else
+				doBeep = true
+				settings[CharConfig]['beep'] = doBeep
+				save_settings()
+				print_ts('\ayBeep Alerts Enabled.')
             end
         end
         -- radius
@@ -604,6 +617,7 @@ local load_binds = function()
                 print_ts('\ayIgnore List (\a-t'..Me.CleanName()..'\ax): No ignore list configured.')
             end
         end
+    		-- Announce Alerts
         if cmd == 'announce' and val_str == 'on' then
             announce = true
             settings[CharConfig]['announce'] = announce
@@ -615,6 +629,7 @@ local load_binds = function()
             save_settings()
             print_ts('\ayNo longer announcing players entering/exiting the zone.')
         end
+    		-- GM Checks
         if cmd == 'gm' and val_str == 'on' then
             gms = true
             settings[CharConfig]['gms'] = gms
@@ -626,6 +641,7 @@ local load_binds = function()
             save_settings()
             print_ts('\ayGM Alerts disabled.')
         end
+    		-- Status
         if cmd == 'status' then print_status() end
         if cmd == nil or cmd == 'help' then
             print_ts('\ayAlert Master Usage:')
@@ -636,6 +652,8 @@ local load_binds = function()
             print_ts('\t\ay/am gm on|off\a-t -- toggle GM alerts')
             print_ts('\t\ay/am pcs on|off\a-t -- toggle PC alerts')
             print_ts('\t\ay/am spawns on|off\a-t -- toggle spawn alerts')
+      			print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
+
             print_ts('\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
             print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
             print_ts('\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
@@ -687,6 +705,8 @@ local load_settings = function()
     gms = settings[CharConfig]['gms']
     announce = settings[CharConfig]['announce']
     ignoreguild = settings[CharConfig]['ignoreguild']
+  	if settings[CharConfig]['beep'] == nil then settings[CharConfig]['beep'] = false end
+    doBeep = settings[CharConfig]['beep']
     -- setup safe zone "set"
     for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
@@ -702,7 +722,7 @@ local setup = function()
     GUI_Main.Refresh.Table.Filtered = true
     GUI_Main.Refresh.Table.Unhandled = true
     mq.imgui.init('DrawSearchWindow', DrawSearchGUI)
-    print_ts('\ayAlert Master (v2022-02-03) by (\a-to_O\ay) Special.Ed (\a-to_O\ay)')
+    print_ts('\ayAlert Master (v2024-01-29) Original by (\a-to_O\ay) Special.Ed (\a-to_O\ay) \ayUpdated by (\a-to_O\ay) Grimmier (\a-to_O\ay)')
     print_ts('\atLoaded '..settings_file)
     print_ts('\ay/am help for usage')
     print_status()
@@ -835,6 +855,7 @@ local check_for_spawns = function()
                     tSpawns[id] = v
                     spawnAlerts[id] = v
                     spawnAlertsUpdated = true
+                    numAlerts =numAlerts + 1
                 end
             end
             if tSpawns ~= nil then
@@ -846,6 +867,7 @@ local check_for_spawns = function()
                         AlertWindow_Show = false
                         AlertWindowOpen = false
                         spawnAlertsUpdated = true
+                        numAlerts = numAlerts - 1
                     end
                 end
             end
@@ -854,6 +876,8 @@ local check_for_spawns = function()
                 AlertWindow_Show = true
                 AlertWindowOpen = true
                 DrawAlertGUI()
+                alertTime = os.time()
+				if doBeep then CMD('/beep') end
             end
         end
     end
@@ -886,7 +910,7 @@ local check_for_zone_change = function()
         AlertWindowOpen, AlertWindow_Show = false, false
         tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}
         zone_id = Zone.ID()
-        alertTime = 0
+        alertTime = os.time()
     end
 end
 local loop = function()
@@ -898,10 +922,13 @@ local loop = function()
             check_for_pcs()
             check_for_spawns()
         end
-        if (os.time() - alertTime > remind and AlertWindow_Show == false and #spawnAlerts >0) then
+        if Me.Zoning() then numAlerts = 0 end
+        --CMD('/echo '..numAlerts)
+        if (os.time() - alertTime > remind and AlertWindow_Show == false and numAlerts >0) then
             AlertWindow_Show = true
             AlertWindowOpen = true
             DrawAlertGUI()
+      			if doBeep then CMD('/beep') end
         end
         if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
         curZone = TLO.Zone.Name
