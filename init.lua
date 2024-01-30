@@ -722,7 +722,7 @@ local setup = function()
     GUI_Main.Refresh.Table.Filtered = true
     GUI_Main.Refresh.Table.Unhandled = true
     mq.imgui.init('DrawSearchWindow', DrawSearchGUI)
-    print_ts('\ayAlert Master (v2022-02-03) by (\a-to_O\ay) Special.Ed (\a-to_O\ay)')
+    print_ts('\ayAlert Master (v2024-01-29) Original by (\a-to_O\ay) Special.Ed (\a-to_O\ay) \ayUpdated by (\a-to_O\ay) Grimmier (\a-to_O\ay)')
     print_ts('\atLoaded '..settings_file)
     print_ts('\ay/am help for usage')
     print_status()
