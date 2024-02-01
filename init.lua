@@ -48,8 +48,8 @@ local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
 
 -- [[ UI ]] --
-local AlertWindow_Show = false
-local AlertWindowOpen = false
+local AlertWindow_Show = true
+local AlertWindowOpen = true
 local SearchWindow_Show = false
 local SearchWindowOpen = false
 local Table_Cache = {
@@ -57,6 +57,8 @@ local Table_Cache = {
     Unhandled = {},
     Mobs = {},
 }
+local alertFlags = bit32.bor(ImGuiWindowFlags.None)
+
 local GUI_Main = {
     Open  = false,
     Show  = false,
@@ -359,13 +361,15 @@ local function BuildAlertRows () --Build the Button Rows for the GUI Window
         end
     end
 end
-function DrawAlertGUI() --Draw GUI Window
-    if AlertWindowOpen  then
+function DrawAlertGUI() -- Draw GUI Window
+    if AlertWindowOpen then
         if mq.TLO.Me.Zoning() then return end
-        AlertWindow_Show, AlertWindowOpen = ImGui.Begin("Alert Window", AlertWindowOpen, ImGuiWindowFlags.None)
-        BuildAlertRows()
-        -- close button
-        if ImGui.SmallButton("X") then
+
+        -- The second returned value from ImGui.Begin (named 'opened' here) 
+        -- indicates if the window is still open or if the close button has been clicked
+        AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
+
+        if not opened then
             AlertWindowOpen = false
             AlertWindow_Show = false
             if remind > 0 then
@@ -373,7 +377,10 @@ function DrawAlertGUI() --Draw GUI Window
             else
                 spawnAlerts = {}
             end
+        else
+            BuildAlertRows()
         end
+
         ImGui.End()
     end
 end
