@@ -52,6 +52,7 @@ local AlertWindow_Show = true
 local AlertWindowOpen = true
 local SearchWindow_Show = false
 local SearchWindowOpen = false
+local ShowSpawnListWindow = false
 local Table_Cache = {
     Rules = {},
     Unhandled = {},
@@ -284,9 +285,11 @@ local function DrawSearchWindow()
         if #Table_Cache.Unhandled > 0 then ImGui.PopStyleColor(3) end
         ImGui.SameLine()
         if ImGui.SmallButton("Refresh Zone") then RefreshZone() end
+        -- ImGui.SameLine()
+        -- if ImGui.Button("Show NPC List") then ShowSpawnListWindow = not ShowSpawnListWindow end
         ImGui.PopStyleVar()
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
-        if ImGui.BeginTabBar('##TabBar') then
+        if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.Reorderable) then
             if ImGui.BeginTabItem(string.format('%s', curZone)) then
                 ImGui.PushItemWidth(-95)
                 local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
@@ -339,28 +342,64 @@ local function DrawSearchWindow()
                 end
                 ImGui.EndTabItem()
             end
-        ImGui.EndTabBar()
+            -- Tab for NPC List
+            if ImGui.BeginTabItem("Spawn List Current Zone") then
+                local npcs = settings[Zone.ShortName()]
+                if npcs ~= nil and next(npcs) ~= nil then
+                    -- Added ImGuiTableFlags_Resizable flag to make the table resizable
+                    if ImGui.BeginTable("NPCListTable", 3, ImGuiTableFlags.Resizable) then
+                        -- Set up table headers
+                        ImGui.TableSetupColumn("NPC Name")
+                        ImGui.TableSetupColumn("Zone")
+                        ImGui.TableSetupColumn("Remove")
+                        ImGui.TableHeadersRow()
+
+                        for id, spawn in pairs(npcs) do
+                            ImGui.TableNextRow()
+                            ImGui.TableNextColumn()
+                            ImGui.Text(spawn)
+                            ImGui.TableNextColumn()
+                            ImGui.Text(Zone.ShortName())
+                            ImGui.TableNextColumn()
+                            if ImGui.SmallButton('Remove##'..id) then 
+                                CMD('/am spawndel "'..spawn..'"') 
+                            end
+                        end
+
+                        ImGui.EndTable()
+                    end
+                else
+                    ImGui.Text('No spawns in list for this zone. Add some!')
+                end
+                ImGui.EndTabItem()
+            end
+
+            ImGui.EndTabBar()
         end
-        ImGui.PopStyleVar()
+
         ImGui.End()
     end
 end
--- Gui
+-- Alert GUI
 local function BuildAlertRows () --Build the Button Rows for the GUI Window
     if zone_id == Zone.ID() then
         for id, spawnData in pairs(spawnAlerts) do
-            if ImGui.Button(spawnData.CleanName() .. " : " .. math.floor(spawnData.Distance() or 0)) then
+            if ImGui.Button(spawnData.CleanName()) then
+               -- CMD('/nav stop')
                 CMD('/nav id '..spawnData.ID())
                 CMD('/target id '..spawnData.ID())
             end
             if ImGui.IsItemHovered() then
                 ImGui.BeginTooltip()
-                ImGui.Text("Click to Navigate to "..spawnData.CleanName().." Dist: "..math.floor(spawnData.Distance() or 0))
+                ImGui.Text("Click to Navigate to "..spawnData.CleanName())
                 ImGui.EndTooltip()
             end
+            ImGui.SameLine()
+            ImGui.LabelText("","Dist: " .. math.floor(spawnData.Distance() or 0))
         end
     end
 end
+
 function DrawAlertGUI() -- Draw GUI Window
     if AlertWindowOpen then
         if mq.TLO.Me.Zoning() then return end
@@ -387,7 +426,44 @@ end
 local function DrawSearchGUI()
     RefreshZone()
     DrawSearchWindow()
+   -- DrawSpawnListWindow()  -- Render the NPC list window
 end
+-- function DrawSpawnListWindow()
+--     if ShowSpawnListWindow then
+--         ShowSpawnListWindow, shouldStayOpen = ImGui.Begin("NPC List", ShowSpawnListWindow, ImGuiWindowFlags.None)
+
+--         if not shouldStayOpen then
+--             ShowSpawnListWindow = false
+--         else
+--             local npcs = settings[Zone.ShortName()]
+--             if npcs ~= nil and next(npcs) ~= nil then
+--                 if ImGui.BeginTable("NPCListTable", 3) then -- Note: 3 columns now
+--                     -- Set up table headers
+--                     ImGui.TableSetupColumn("NPC Name")
+--                     ImGui.TableSetupColumn("Zone")
+--                     ImGui.TableSetupColumn("Remove")
+--                     ImGui.TableHeadersRow()
+
+--                     for id, spawn in pairs(npcs) do
+--                         ImGui.TableNextRow()
+--                         ImGui.TableNextColumn()
+--                         ImGui.Text(spawn)
+--                         ImGui.TableNextColumn()
+--                         ImGui.Text(Zone.ShortName())
+--                         ImGui.TableNextColumn()
+--                         if ImGui.SmallButton('Remove##'..id) then CMD('/am spawndel "'..spawn..'"') end
+--                     end
+
+--                     ImGui.EndTable()
+--                 end
+--             else
+--                 ImGui.Text('No spawns in list for this zone. Add some!')
+--             end
+--         end
+
+--         ImGui.End()
+--     end
+-- end
 -- helpers
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
 local GetCharZone = function()
