@@ -344,6 +344,14 @@ local function DrawSearchWindow()
             end
             -- Tab for NPC List
             if ImGui.BeginTabItem("Spawn List Current Zone") then
+                -- Input box for new spawn name
+                newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
+                ImGui.SameLine()
+                -- Button to add the new spawn
+                if ImGui.Button("Add Spawn") then
+                    CMD('/am spawnadd "'..newSpawnName..'"')
+                    newSpawnName = ""
+                end
                 local npcs = settings[Zone.ShortName()]
                 if npcs ~= nil and next(npcs) ~= nil then
                     -- Added ImGuiTableFlags_Resizable flag to make the table resizable
