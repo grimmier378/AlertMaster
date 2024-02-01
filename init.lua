@@ -58,7 +58,17 @@ local Table_Cache = {
     Mobs = {},
 }
 local alertFlags = bit32.bor(ImGuiWindowFlags.None)
-
+local spawnListFlags = bit32.bor(
+    ImGuiTableFlags.Resizable,
+    ImGuiTableFlags.RowBg,
+    ImGuiTableFlags.SizingFixedFit,
+    ImGuiTableFlags.BordersV,
+    ImGuiTableFlags.BordersOuter,
+    ImGuiTableFlags.Reorderable,
+    ImGuiTableFlags.ScrollY,
+    ImGuiTableFlags.ScrollX,
+    ImGuiTableFlags.Hideable
+)
 local GUI_Main = {
     Open  = false,
     Show  = false,
@@ -362,9 +372,9 @@ local function DrawSearchWindow()
                     newSpawnName = ""
                 end
                 if npcs ~= nil and next(npcs) ~= nil then
-                    if ImGui.BeginTable("NPCListTable", 3) then
+                    if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
                         -- Set up table headers
-                        ImGui.TableSetupColumn("NPC Name")
+                        ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
                         ImGui.TableSetupColumn("Zone")
                         ImGui.TableSetupColumn("Remove")
                         ImGui.TableHeadersRow()
@@ -413,22 +423,33 @@ local function DrawSearchWindow()
         ImGui.End()
     end
 end
--- Alert GUI
-local function BuildAlertRows () --Build the Button Rows for the GUI Window
+local function BuildAlertRows() -- Build the Button Rows for the GUI Window
     if zone_id == Zone.ID() then
-        for id, spawnData in pairs(spawnAlerts) do
-            if ImGui.Button(spawnData.CleanName()) then
-               -- CMD('/nav stop')
-                CMD('/nav id '..spawnData.ID())
-                CMD('/target id '..spawnData.ID())
+        -- Start a new table for alerts
+        if ImGui.BeginTable("AlertTable", 2, ImGuiTableFlags_Borders or ImGuiTableFlags_RowBg) then
+            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed)
+            ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags_WidthFixed)
+            ImGui.TableHeadersRow()
+
+            for id, spawnData in pairs(spawnAlerts) do
+                ImGui.TableNextRow()
+                ImGui.TableSetColumnIndex(0)
+                -- Append the spawn's ID to the button label to ensure uniqueness
+                if ImGui.Button(spawnData.CleanName() .. "##" .. spawnData.ID()) then
+                    -- Actions tied to this specific spawn
+                    CMD('/nav id ' .. spawnData.ID())
+                    CMD('/target id ' .. spawnData.ID())
+                end
+                if ImGui.IsItemHovered() then
+                    ImGui.BeginTooltip()
+                    ImGui.Text("Click to Navigate to " .. spawnData.CleanName())
+                    ImGui.EndTooltip()
+                end
+            
+                ImGui.TableSetColumnIndex(1)
+                ImGui.Text("Dist: " .. math.floor(spawnData.Distance() or 0))
             end
-            if ImGui.IsItemHovered() then
-                ImGui.BeginTooltip()
-                ImGui.Text("Click to Navigate to "..spawnData.CleanName())
-                ImGui.EndTooltip()
-            end
-            ImGui.SameLine()
-            ImGui.LabelText("","Dist: " .. math.floor(spawnData.Distance() or 0))
+            ImGui.EndTable()
         end
     end
 end
@@ -883,7 +904,7 @@ local spawn_search_npcs = function()
                 local id = spawn.ID()
                 if spawn ~= nil and id ~= nil then
                      -- Case-sensitive comparison using CleanName for exact matching
-                    if spawn.CleanName() == v then
+                    if spawn.CleanName() == v or spawn.Name() == v then
                         tmp[id] = spawn
                     end
                 end
@@ -1030,14 +1051,16 @@ local loop = function()
         end
         if Me.Zoning() then numAlerts = 0 end
         --CMD('/echo '..numAlerts)
-        if ((os.time() - alertTime) > (remind * 60) and AlertWindow_Show == false and numAlerts >0) then
-            if doAlert then
-                AlertWindow_Show = true
-                AlertWindowOpen = true
-                DrawAlertGUI()
+        if check_safe_zone() ~= true then
+            if ((os.time() - alertTime) > (remind * 60) and AlertWindow_Show == false and numAlerts >0) then
+                if doAlert then
+                    AlertWindow_Show = true
+                    AlertWindowOpen = true
+                    DrawAlertGUI()
+                end
+      		    if doBeep then CMD('/beep') end
+                alertTime = os.time()
             end
-      		if doBeep then CMD('/beep') end
-            alertTime = os.time()
         end
         if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
         curZone = TLO.Zone.Name
