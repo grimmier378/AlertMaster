@@ -48,11 +48,10 @@ local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
 
 -- [[ UI ]] --
-local AlertWindow_Show = true
-local AlertWindowOpen = true
+local AlertWindow_Show = false
+local AlertWindowOpen = false
 local SearchWindow_Show = false
 local SearchWindowOpen = false
-local ShowSpawnListWindow = false
 local Table_Cache = {
     Rules = {},
     Unhandled = {},
@@ -115,6 +114,14 @@ local GUI_Main = {
         },
     },
 }
+function isSpawnInAlerts(spawnName, spawnAlerts)
+    for _, spawnData in pairs(spawnAlerts) do
+        if spawnData.CleanName() == spawnName then
+            return true
+        end
+    end
+    return false
+end
 local function SpawnToEntry(spawn, row)
     if spawn.Distance() then
         local entry = {
@@ -343,34 +350,52 @@ local function DrawSearchWindow()
                 ImGui.EndTabItem()
             end
             -- Tab for NPC List
-            if ImGui.BeginTabItem("Spawn List Current Zone") then
-                -- Input box for new spawn name
-                newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
-                ImGui.SameLine()
+            if ImGui.BeginTabItem("NPC List") then
+                local npcs = settings[Zone.ShortName()]
+              -- Input box for new spawn name
+              newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
+              ImGui.SameLine()
                 -- Button to add the new spawn
                 if ImGui.Button("Add Spawn") then
                     CMD('/am spawnadd "'..newSpawnName..'"')
+                    -- Optionally clear the input box or handle further logic
                     newSpawnName = ""
                 end
-                local npcs = settings[Zone.ShortName()]
                 if npcs ~= nil and next(npcs) ~= nil then
-                    -- Added ImGuiTableFlags_Resizable flag to make the table resizable
-                    if ImGui.BeginTable("NPCListTable", 3, ImGuiTableFlags.Resizable) then
+                    if ImGui.BeginTable("NPCListTable", 3) then
                         -- Set up table headers
                         ImGui.TableSetupColumn("NPC Name")
                         ImGui.TableSetupColumn("Zone")
                         ImGui.TableSetupColumn("Remove")
                         ImGui.TableHeadersRow()
 
-                        for id, spawn in pairs(npcs) do
+                        for id, spawnName in pairs(npcs) do
                             ImGui.TableNextRow()
                             ImGui.TableNextColumn()
-                            ImGui.Text(spawn)
+                            -- Check if the spawn is in the alert list and change color
+                            if isSpawnInAlerts(spawnName, spawnAlerts) then
+                                ImGui.PushStyleColor(ImGuiCol.Text, 0, 1, 0, 1) -- Green color for alert spawns
+                            end
+                           -- Text for each spawn name
+                            ImGui.Text(spawnName)
+                            if isSpawnInAlerts(spawnName, spawnAlerts) then
+                                ImGui.PopStyleColor()
+                                if ImGui.IsItemHovered() then
+                                    ImGui.BeginTooltip()
+                                    ImGui.Text("Green Names are up! Right-Click to Navigate to "..spawnName)
+                                    ImGui.EndTooltip()
+                                -- Detect right-click on the text
+                                    if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
+                                        CMD('/nav spawn "'..spawnName..'"') 
+                                        CMD('/target ${Spawn[npc '..spawnName..']}')
+                                    end
+                                end
+                            end
                             ImGui.TableNextColumn()
                             ImGui.Text(Zone.ShortName())
                             ImGui.TableNextColumn()
                             if ImGui.SmallButton('Remove##'..id) then 
-                                CMD('/am spawndel "'..spawn..'"') 
+                                CMD('/am spawndel "'..spawnName..'"') 
                             end
                         end
 
@@ -411,11 +436,7 @@ end
 function DrawAlertGUI() -- Draw GUI Window
     if AlertWindowOpen then
         if mq.TLO.Me.Zoning() then return end
-
-        -- The second returned value from ImGui.Begin (named 'opened' here) 
-        -- indicates if the window is still open or if the close button has been clicked
         AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
-
         if not opened then
             AlertWindowOpen = false
             AlertWindow_Show = false
@@ -434,44 +455,8 @@ end
 local function DrawSearchGUI()
     RefreshZone()
     DrawSearchWindow()
-   -- DrawSpawnListWindow()  -- Render the NPC list window
 end
--- function DrawSpawnListWindow()
---     if ShowSpawnListWindow then
---         ShowSpawnListWindow, shouldStayOpen = ImGui.Begin("NPC List", ShowSpawnListWindow, ImGuiWindowFlags.None)
 
---         if not shouldStayOpen then
---             ShowSpawnListWindow = false
---         else
---             local npcs = settings[Zone.ShortName()]
---             if npcs ~= nil and next(npcs) ~= nil then
---                 if ImGui.BeginTable("NPCListTable", 3) then -- Note: 3 columns now
---                     -- Set up table headers
---                     ImGui.TableSetupColumn("NPC Name")
---                     ImGui.TableSetupColumn("Zone")
---                     ImGui.TableSetupColumn("Remove")
---                     ImGui.TableHeadersRow()
-
---                     for id, spawn in pairs(npcs) do
---                         ImGui.TableNextRow()
---                         ImGui.TableNextColumn()
---                         ImGui.Text(spawn)
---                         ImGui.TableNextColumn()
---                         ImGui.Text(Zone.ShortName())
---                         ImGui.TableNextColumn()
---                         if ImGui.SmallButton('Remove##'..id) then CMD('/am spawndel "'..spawn..'"') end
---                     end
-
---                     ImGui.EndTable()
---                 end
---             else
---                 ImGui.Text('No spawns in list for this zone. Add some!')
---             end
---         end
-
---         ImGui.End()
---     end
--- end
 -- helpers
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
 local GetCharZone = function()
@@ -966,22 +951,26 @@ local check_for_spawns = function()
         if tmp ~= nil then
             for id, v in pairs(tmp) do
                 if tSpawns[id] == nil then
-                    print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
+                    if check_safe_zone() ~= true then
+                        print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
+                        spawnAlertsUpdated = true
+                    end    
                     tSpawns[id] = v
                     spawnAlerts[id] = v
-                    spawnAlertsUpdated = true
                     numAlerts =numAlerts + 1
                 end
             end
             if tSpawns ~= nil then
                 for id, v in pairs(tSpawns) do
                     if tmp[id] == nil then
-                        print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax was killed or despawned.')
+                        if check_safe_zone() ~= true then
+                            print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax was killed or despawned.')
+                            AlertWindow_Show = false
+                            AlertWindowOpen = false
+                            spawnAlertsUpdated = true
+                        end
                         tSpawns[id] = nil
                         spawnAlerts[id] = nil
-                        AlertWindow_Show = false
-                        AlertWindowOpen = false
-                        spawnAlertsUpdated = true
                         numAlerts = numAlerts - 1
                     end
                 end
@@ -1033,11 +1022,11 @@ end
 local loop = function()
     while true do
         check_for_zone_change()
+        check_for_spawns() -- always refresh spawn list and only alert if not a safe zone.(checked later in the function)
         if check_safe_zone() ~= true then
             check_for_gms()
             check_for_announce()
             check_for_pcs()
-            check_for_spawns()
         end
         if Me.Zoning() then numAlerts = 0 end
         --CMD('/echo '..numAlerts)
