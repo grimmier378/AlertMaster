@@ -289,6 +289,7 @@ local function DrawRuleRow(entry)
     ImGui.SameLine()
     if ImGui.SmallButton("Del##" .. entry.ID) then CMD('/am spawndel "'..entry.MobName..'"') end
 end
+
 local function DrawSearchWindow()
     if SearchWindowOpen then
         if mq.TLO.Me.Zoning() then return end
@@ -365,79 +366,99 @@ local function DrawSearchWindow()
                 end
                 ImGui.EndTabItem()
             end
-            -- Tab for NPC List
-            if ImGui.BeginTabItem("NPC List") then
-                local npcs = settings[Zone.ShortName()]
-              -- Input box for new spawn name
-              newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
-              ImGui.SameLine()
-                -- Button to add the new spawn
-                if ImGui.Button("Add Spawn") then
-                    CMD('/am spawnadd "'..newSpawnName..'"')
-                    -- Optionally clear the input box or handle further logic
-                    newSpawnName = ""
-                end
-                if npcs ~= nil and next(npcs) ~= nil then
-                    if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
-                        -- Set up table headers
-                        ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
-                        ImGui.TableSetupColumn("Zone")
-                        ImGui.TableSetupColumn("Remove")
-                        ImGui.TableHeadersRow()
-                
-                        for id, spawnName in pairs(npcs) do
-                            ImGui.TableNextRow()
-                            ImGui.TableNextColumn()
-                
-                            -- Determine the display name
-                            local displayName = spawnName
-                            if string.find(spawnName, "_") then
-                                displayName = TLO.Spawn(spawnName).CleanName() -- Assuming this function returns the "clean" name
-                            end
-                
-                            -- Check if the spawn is in the alert list and change color
-                            if isSpawnInAlerts(spawnName, spawnAlerts) then
-                                ImGui.PushStyleColor(ImGuiCol.Text, 0, 1, 0, 1) -- Green color for alert spawns
-                            end
-                
-                            -- Display the name and handle interaction
-                            ImGui.Text(displayName)
-                            if ImGui.IsItemHovered() then
-                                ImGui.BeginTooltip()
-                                ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
-                                ImGui.EndTooltip()
-                
-                                -- Right-click interaction uses the original spawnName
-                                if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
-                                    CMD('/nav spawn "' .. spawnName .. '"') 
-                                    CMD('/target ${Spawn[npc ' .. spawnName .. ']}')
-                                end
-                            end
-                
-                            if isSpawnInAlerts(spawnName, spawnAlerts) then
-                                ImGui.PopStyleColor()
-                            end
-                
-                            ImGui.TableNextColumn()
-                            ImGui.Text(Zone.ShortName())
-                
-                            ImGui.TableNextColumn()
-                            if ImGui.SmallButton('Remove##' .. id) then 
-                                CMD('/am spawndel "' .. spawnName .. '"') 
-                            end
-                        end
-                
-                        ImGui.EndTable()
-                    end
-                else
-                    ImGui.Text('No spawns in list for this zone. Add some!')
-                end
-                ImGui.EndTabItem()
-            end
 
+-- Tab for NPC List
+if ImGui.BeginTabItem("NPC List") then
+    local npcs = settings[Zone.ShortName()] or {}
+    newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
+    ImGui.SameLine()
+    -- Button to add the new spawn
+    if ImGui.Button("Add Spawn") then
+        CMD('/am spawnadd "'..newSpawnName..'"')
+        newSpawnName = ""
+        -- Refresh npcs from settings in case it was updated
+        npcs = settings[Zone.ShortName()] or {}
+    end
+
+    -- Populate and sort sortedNpcs right before using it
+    local sortedNpcs = {}
+    for id, spawnName in pairs(npcs) do
+        table.insert(sortedNpcs, {
+            name = spawnName,
+            isInAlerts = isSpawnInAlerts(spawnName, spawnAlerts)
+        })
+    end
+
+    -- Sort the table so NPCs in alerts come first
+    table.sort(sortedNpcs, function(a, b)
+        if a.isInAlerts and not b.isInAlerts then
+            return true
+        elseif not a.isInAlerts and b.isInAlerts then
+            return false
+        else
+            return a.name < b.name
+        end
+    end)
+
+    -- Now build the table with the sorted list
+    if next(sortedNpcs) ~= nil then
+        if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
+            -- Set up table headers
+            ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+            ImGui.TableSetupColumn("Zone")
+            ImGui.TableSetupColumn("Remove")
+            ImGui.TableHeadersRow()
+    
+            for index, npc in ipairs(sortedNpcs) do
+                local spawnName = npc.name
+                ImGui.TableNextRow()
+                ImGui.TableNextColumn()
+    
+                -- Modify the spawnName to create a display name
+                local displayName = spawnName:gsub("_", " "):gsub("%d*$", "") -- Replace underscores with spaces and remove trailing digits
+    
+                -- Check if the spawn is in the alert list and change color
+                if npc.isInAlerts then
+                    ImGui.PushStyleColor(ImGuiCol.Text, 0, 1, 0, 1) -- Green color for alert spawns
+                end
+    
+                -- Display the name and handle interaction
+                ImGui.Text(displayName)
+                if ImGui.IsItemHovered() then
+                    ImGui.BeginTooltip()
+                    ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
+                    ImGui.EndTooltip()
+    
+                    -- Right-click interaction uses the original spawnName
+                    if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
+                        CMD('/nav spawn "' .. spawnName .. '"') 
+                        CMD('/target ${Spawn[npc ' .. spawnName .. ']}')
+                    end
+                end
+    
+                if npc.isInAlerts then
+                    ImGui.PopStyleColor()
+                end
+    
+                ImGui.TableNextColumn()
+                ImGui.Text(Zone.ShortName())
+    
+                -- Correctly concatenate 'id' as a string for ImGui identifiers
+                ImGui.TableNextColumn()
+                if ImGui.SmallButton('Remove##' .. tostring(index)) then 
+                    CMD('/am spawndel "' .. spawnName .. '"') 
+                end
+            end
+    
+            ImGui.EndTable()
+        end
+    else
+        ImGui.Text('No spawns in list for this zone. Add some!')
+    end
+        ImGui.EndTabItem()
+    end
             ImGui.EndTabBar()
         end
-
         ImGui.End()
     end
 end
