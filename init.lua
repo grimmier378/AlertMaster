@@ -126,7 +126,7 @@ local GUI_Main = {
 }
 function isSpawnInAlerts(spawnName, spawnAlerts)
     for _, spawnData in pairs(spawnAlerts) do
-        if spawnData.CleanName() == spawnName then
+        if spawnData.CleanName() == spawnName or spawnData.Name() == spawnName then
             return true
         end
     end
@@ -326,7 +326,7 @@ local function DrawSearchWindow()
                 if ImGui.BeginTable('##RulesTable', 7, GUI_Main.Table.Flags) then
                     ImGui.TableSetupScrollFreeze(0, 1)
                     ImGui.TableSetupColumn("NavTO", ImGuiTableColumnFlags.NoSort, 2, GUI_Main.Table.Column_ID.Remove)
-                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobName)
+                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobName, 150)
                     ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobLvl)
                     ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobDist)
                     ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobID)
@@ -634,12 +634,38 @@ local load_binds = function()
             save_settings()
             print_ts('\ayAdded spawn alert for '..val_str..' in '..zone)
         elseif cmd == 'spawndel' and val_str:len() > 0 then
-            -- remove from the ini
+            -- Identify and remove the spawn from the ini
+            local found = false
             for k, v in pairs(settings[zone]) do
-                if settings[zone][k] == val_str then settings[zone][k] = nil end
+                if v == val_str then
+                    settings[zone][k] = nil
+                    found = true
+                    break
+                end
             end
-            save_settings()
-            print_ts('\ayRemoved spawn alert for '..val_str..' in '..zone)
+        
+            if found then
+                -- Rebuild the table to eliminate gaps
+                local newTable = {}
+                for _, v in pairs(settings[zone]) do
+                    table.insert(newTable, v)
+                end
+        
+                -- Clear the existing table
+                for k in pairs(settings[zone]) do
+                    settings[zone][k] = nil
+                end
+        
+                -- Repopulate the table with renumbered spawns
+                for i, v in ipairs(newTable) do
+                    settings[zone]['Spawn'..i] = v
+                end
+        
+                save_settings()
+                print_ts('\ayRemoved spawn alert for '..val_str..' in '..zone)
+            else
+                print_ts('\aySpawn alert for '..val_str..' not found in '..zone)
+            end
         elseif cmd == 'spawnlist' then
             if getTableSize(settings[zone]) > 0 then
                 print_ts('\aySpawn Alerts (\a-t'..zone..'\ax): ')
