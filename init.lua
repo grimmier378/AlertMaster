@@ -255,7 +255,6 @@ local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
     if ImGui.SmallButton("NavTo##" .. entry.ID) then
         CMD('/nav id '..entry.MobID)
-        CMD('/target id '..entry.MobID)
         printf('\ayMoving to \ag%s',entry.MobName)
     end
     ImGui.TableNextColumn()
