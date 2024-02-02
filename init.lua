@@ -384,37 +384,49 @@ local function DrawSearchWindow()
                         ImGui.TableSetupColumn("Zone")
                         ImGui.TableSetupColumn("Remove")
                         ImGui.TableHeadersRow()
-
+                
                         for id, spawnName in pairs(npcs) do
                             ImGui.TableNextRow()
                             ImGui.TableNextColumn()
+                
+                            -- Determine the display name
+                            local displayName = spawnName
+                            if string.find(spawnName, "_") then
+                                displayName = TLO.Spawn(spawnName).CleanName() -- Assuming this function returns the "clean" name
+                            end
+                
                             -- Check if the spawn is in the alert list and change color
                             if isSpawnInAlerts(spawnName, spawnAlerts) then
                                 ImGui.PushStyleColor(ImGuiCol.Text, 0, 1, 0, 1) -- Green color for alert spawns
                             end
-                           -- Text for each spawn name
-                            ImGui.Text(spawnName)
-                            if isSpawnInAlerts(spawnName, spawnAlerts) then
-                                ImGui.PopStyleColor()
-                                if ImGui.IsItemHovered() then
-                                    ImGui.BeginTooltip()
-                                    ImGui.Text("Green Names are up! Right-Click to Navigate to "..spawnName)
-                                    ImGui.EndTooltip()
-                                -- Detect right-click on the text
-                                    if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
-                                        CMD('/nav spawn "'..spawnName..'"') 
-                                        CMD('/target ${Spawn[npc '..spawnName..']}')
-                                    end
+                
+                            -- Display the name and handle interaction
+                            ImGui.Text(displayName)
+                            if ImGui.IsItemHovered() then
+                                ImGui.BeginTooltip()
+                                ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
+                                ImGui.EndTooltip()
+                
+                                -- Right-click interaction uses the original spawnName
+                                if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
+                                    CMD('/nav spawn "' .. spawnName .. '"') 
+                                    CMD('/target ${Spawn[npc ' .. spawnName .. ']}')
                                 end
                             end
+                
+                            if isSpawnInAlerts(spawnName, spawnAlerts) then
+                                ImGui.PopStyleColor()
+                            end
+                
                             ImGui.TableNextColumn()
                             ImGui.Text(Zone.ShortName())
+                
                             ImGui.TableNextColumn()
-                            if ImGui.SmallButton('Remove##'..id) then 
-                                CMD('/am spawndel "'..spawnName..'"') 
+                            if ImGui.SmallButton('Remove##' .. id) then 
+                                CMD('/am spawndel "' .. spawnName .. '"') 
                             end
                         end
-
+                
                         ImGui.EndTable()
                     end
                 else
