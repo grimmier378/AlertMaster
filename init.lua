@@ -1,28 +1,28 @@
 --[[
     Created by Special.Ed
     Shout out to the homies:
-        Lads
-        Dannuic (my on again off again thing)
-        Knightly (no, i won't take that bet)
+    Lads
+    Dannuic (my on again off again thing)
+    Knightly (no, i won't take that bet)
 --]]
 --[[
     Modified by Grimmier
     Added a GUI and commands.
-        ** Commands **
-        * /am show will toggle the search window.
-        * /am popup will toggle the alert popup window.
-        ** Search Window **
-        * You can search with the search box
-        * Sort by columns (Shift-Clicking Columns will MultiSort based onthe order you click.)
-        * Clicking the check box for track, and the spawn will be added to spawnlist
-        * Clicking ignore will remove the spawn from the list if it exists.
-        * you can navTo any spawn in the search window by clicking the button, rightclicking the name will target the spawn.
-        ** Alert Window **
-        * The Alert Popup Window lists the spawns that you are tracking and are alive. Shown as "Name : Distance"
-        * Clicking the button on the Alert Window will NavTo the spawn.
-        * Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
-        * remind setting is in minutes.
- ]]
+    ** Commands **
+    * /am show will toggle the search window.
+    * /am popup will toggle the alert popup window.
+    ** Search Window **
+    * You can search with the search box
+    * Sort by columns (Shift-Clicking Columns will MultiSort based onthe order you click.)
+    * Clicking the check box for track, and the spawn will be added to spawnlist
+    * Clicking ignore will remove the spawn from the list if it exists.
+    * you can navTo any spawn in the search window by clicking the button, rightclicking the name will target the spawn.
+    ** Alert Window **
+    * The Alert Popup Window lists the spawns that you are tracking and are alive. Shown as "Name : Distance"
+    * Clicking the button on the Alert Window will NavTo the spawn.
+    * Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
+    * remind setting is in minutes.
+]]
 local LIP = require('lib/LIP')
 require('lib/ed/utils')
 --- @type Mq
@@ -58,7 +58,17 @@ local Table_Cache = {
     Mobs = {},
 }
 local alertFlags = bit32.bor(ImGuiWindowFlags.None)
-
+local spawnListFlags = bit32.bor(
+    ImGuiTableFlags.Resizable,
+    ImGuiTableFlags.RowBg,
+    ImGuiTableFlags.SizingFixedFit,
+    ImGuiTableFlags.BordersV,
+    ImGuiTableFlags.BordersOuter,
+    ImGuiTableFlags.Reorderable,
+    ImGuiTableFlags.ScrollY,
+    ImGuiTableFlags.ScrollX,
+    ImGuiTableFlags.Hideable
+)
 local GUI_Main = {
     Open  = false,
     Show  = false,
@@ -116,7 +126,7 @@ local GUI_Main = {
 }
 function isSpawnInAlerts(spawnName, spawnAlerts)
     for _, spawnData in pairs(spawnAlerts) do
-        if spawnData.CleanName() == spawnName then
+        if spawnData.CleanName() == spawnName or spawnData.Name() == spawnName then
             return true
         end
     end
@@ -135,7 +145,7 @@ local function SpawnToEntry(spawn, row)
             Enum_Action = 'unhandled',
         }
         return entry
-    else
+        else
         return
     end
 end
@@ -158,53 +168,53 @@ local function TableSortSpecs(a, b)
             if a.MobName and b.MobName then
                 if a.MobName < b.MobName then
                     delta = -1
-                elseif a.MobName> b.MobName then
+                    elseif a.MobName> b.MobName then
                     delta = 1
                 end
-            else
+                else
                 return  0
             end
-        elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobID then
+            elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobID then
             if a.MobID and b.MobID then
                 if a.MobID < b.MobID then
                     delta = -1
-                elseif a.MobID > b.MobID then
+                    elseif a.MobID > b.MobID then
                     delta = 1
                 end
-            else
+                else
                 return  0
             end
-        elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobLvl then
+            elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobLvl then
             if a.MobLvl and b.MobLvl then
                 if a.MobLvl < b.MobLvl then
                     delta = -1
-                elseif a.MobLvl > b.MobLvl then
+                    elseif a.MobLvl > b.MobLvl then
                     delta = 1
                 end
-            else
+                else
                 return  0
             end
-        elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobDist then
+            elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobDist then
             if a.MobDist and b.MobDist then
                 if a.MobDist < b.MobDist then
                     delta = -1
-                elseif a.MobDist > b.MobDist then
+                    elseif a.MobDist > b.MobDist then
                     delta = 1
                 end
-            else
+                else
                 return  0
             end
-        elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.Action then
+            elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.Action then
             if a.Enum_Action < b.Enum_Action then
-                    delta = -1
-            elseif a.Enum_Action > b.Enum_Action then
-                    delta = 1
+                delta = -1
+                elseif a.Enum_Action > b.Enum_Action then
+                delta = 1
             end
         end
         if delta ~= 0 then
             if spec.SortDirection == ImGuiSortDirection.Ascending then
                 return delta < 0
-            else
+                else
                 return delta > 0
             end
         end
@@ -279,6 +289,7 @@ local function DrawRuleRow(entry)
     ImGui.SameLine()
     if ImGui.SmallButton("Del##" .. entry.ID) then CMD('/am spawndel "'..entry.MobName..'"') end
 end
+
 local function DrawSearchWindow()
     if SearchWindowOpen then
         if mq.TLO.Me.Zoning() then return end
@@ -292,8 +303,48 @@ local function DrawSearchWindow()
         if #Table_Cache.Unhandled > 0 then ImGui.PopStyleColor(3) end
         ImGui.SameLine()
         if ImGui.SmallButton("Refresh Zone") then RefreshZone() end
-        -- ImGui.SameLine()
-        -- if ImGui.Button("Show NPC List") then ShowSpawnListWindow = not ShowSpawnListWindow end
+        ImGui.SameLine()
+        -- Alert Window Toggle Button
+        if AlertWindowOpen then
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for active state
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
+            ImGui.PopStyleColor(2)
+            else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for inactive state
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
+            ImGui.PopStyleColor(2)
+        end
+        
+        -- Alert Popup Toggle Button
+        if doAlert then
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for enabled
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("DoPopup") then CMD('/am doalert') end
+            ImGui.PopStyleColor(2)
+            else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for disabled
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("DoPopup") then CMD('/am doalert') end
+            ImGui.PopStyleColor(2)
+        end
+        
+        ImGui.SameLine()
+        
+        -- Beep Alert Toggle Button
+        if doBeep then
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for enabled
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("DoBeep") then CMD('/am beep') end
+            ImGui.PopStyleColor(2)
+            else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for disabled
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("DoBeep") then CMD('/am beep') end
+            ImGui.PopStyleColor(2)
+        end
+        
         ImGui.PopStyleVar()
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
         if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.Reorderable) then
@@ -316,7 +367,7 @@ local function DrawSearchWindow()
                 if ImGui.BeginTable('##RulesTable', 7, GUI_Main.Table.Flags) then
                     ImGui.TableSetupScrollFreeze(0, 1)
                     ImGui.TableSetupColumn("NavTO", ImGuiTableColumnFlags.NoSort, 2, GUI_Main.Table.Column_ID.Remove)
-                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobName)
+                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobName, 150)
                     ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobLvl)
                     ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobDist)
                     ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobID)
@@ -349,86 +400,141 @@ local function DrawSearchWindow()
                 end
                 ImGui.EndTabItem()
             end
+            if next(spawnAlerts) ~= nil then
+                
+                -- Change tab background color to something noticeable
+                ImGui.PushStyleColor(ImGuiCol.Tab, 1.0, 0.3, 0.3, 1.0) -- Reddish background for alert
+                ImGui.PushStyleColor(ImGuiCol.TabHovered, 1.0, 0.4, 0.4, 1.0) -- Lighter red when hovered
+                ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+                ImGui.PushStyleColor(ImGuiCol.TabActive, 1.0, 0.5, 0.5, 1.0) -- Even lighter red when active or selected
+                ImGui.BeginTabItem("NPC List")
+                ImGui.PopStyleColor(4)
+                else
+                ImGui.BeginTabItem("NPC List")
+            end
+            
             -- Tab for NPC List
-            if ImGui.BeginTabItem("NPC List") then
-                local npcs = settings[Zone.ShortName()]
-              -- Input box for new spawn name
-              newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
-              ImGui.SameLine()
-                -- Button to add the new spawn
-                if ImGui.Button("Add Spawn") then
-                    CMD('/am spawnadd "'..newSpawnName..'"')
-                    -- Optionally clear the input box or handle further logic
-                    newSpawnName = ""
+            
+            
+            local npcs = settings[Zone.ShortName()] or {}
+            newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
+            ImGui.SameLine()
+            -- Button to add the new spawn
+            if ImGui.Button("Add Spawn") then
+                CMD('/am spawnadd "'..newSpawnName..'"')
+                newSpawnName = ""
+                -- Refresh npcs from settings in case it was updated
+                npcs = settings[Zone.ShortName()] or {}
+            end
+            
+            -- Populate and sort sortedNpcs right before using it
+            local sortedNpcs = {}
+            for id, spawnName in pairs(npcs) do
+                table.insert(sortedNpcs, {
+                    name = spawnName,
+                    isInAlerts = isSpawnInAlerts(spawnName, spawnAlerts)
+                })
+            end
+            
+            -- Sort the table so NPCs in alerts come first
+            table.sort(sortedNpcs, function(a, b)
+                if a.isInAlerts and not b.isInAlerts then
+                    return true
+                    elseif not a.isInAlerts and b.isInAlerts then
+                    return false
+                    else
+                    return a.name < b.name
                 end
-                if npcs ~= nil and next(npcs) ~= nil then
-                    if ImGui.BeginTable("NPCListTable", 3) then
-                        -- Set up table headers
-                        ImGui.TableSetupColumn("NPC Name")
-                        ImGui.TableSetupColumn("Zone")
-                        ImGui.TableSetupColumn("Remove")
-                        ImGui.TableHeadersRow()
-
-                        for id, spawnName in pairs(npcs) do
-                            ImGui.TableNextRow()
-                            ImGui.TableNextColumn()
-                            -- Check if the spawn is in the alert list and change color
-                            if isSpawnInAlerts(spawnName, spawnAlerts) then
-                                ImGui.PushStyleColor(ImGuiCol.Text, 0, 1, 0, 1) -- Green color for alert spawns
-                            end
-                           -- Text for each spawn name
-                            ImGui.Text(spawnName)
-                            if isSpawnInAlerts(spawnName, spawnAlerts) then
-                                ImGui.PopStyleColor()
-                                if ImGui.IsItemHovered() then
-                                    ImGui.BeginTooltip()
-                                    ImGui.Text("Green Names are up! Right-Click to Navigate to "..spawnName)
-                                    ImGui.EndTooltip()
-                                -- Detect right-click on the text
-                                    if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
-                                        CMD('/nav spawn "'..spawnName..'"') 
-                                        CMD('/target ${Spawn[npc '..spawnName..']}')
-                                    end
-                                end
-                            end
-                            ImGui.TableNextColumn()
-                            ImGui.Text(Zone.ShortName())
-                            ImGui.TableNextColumn()
-                            if ImGui.SmallButton('Remove##'..id) then 
-                                CMD('/am spawndel "'..spawnName..'"') 
+            end)
+            -- Now build the table with the sorted list
+            if next(sortedNpcs) ~= nil then
+                if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
+                    -- Set up table headers
+                    ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+                    ImGui.TableSetupColumn("Zone", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+                    ImGui.TableSetupColumn("Remove")
+                    ImGui.TableHeadersRow()
+                    
+                    for index, npc in ipairs(sortedNpcs) do
+                        local spawnName = npc.name
+                        ImGui.TableNextRow()
+                        ImGui.TableNextColumn()
+                        
+                        -- Modify the spawnName to create a display name
+                        local displayName = spawnName:gsub("_", " "):gsub("%d*$", "") -- Replace underscores with spaces and remove trailing digits
+                        
+                        -- Check if the spawn is in the alert list and change color
+                        if npc.isInAlerts then
+                            ImGui.PushStyleColor(ImGuiCol.Text, 0, 1, 0, 1) -- Green color for alert spawns
+                        end
+                        
+                        -- Display the name and handle interaction
+                        ImGui.Text(displayName)
+                        if ImGui.IsItemHovered() then
+                            ImGui.BeginTooltip()
+                            ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
+                            ImGui.EndTooltip()
+                            
+                            -- Right-click interaction uses the original spawnName
+                            if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
+                                CMD('/nav spawn "' .. spawnName .. '"')
+                                CMD('/target ${Spawn[npc ' .. spawnName .. ']}')
                             end
                         end
-
-                        ImGui.EndTable()
+                        
+                        if npc.isInAlerts then
+                            ImGui.PopStyleColor()
+                        end
+                        
+                        ImGui.TableNextColumn()
+                        ImGui.Text(Zone.ShortName())
+                        
+                        -- Correctly concatenate 'id' as a string for ImGui identifiers
+                        ImGui.TableNextColumn()
+                        if ImGui.SmallButton('Remove##' .. tostring(index)) then
+                            CMD('/am spawndel "' .. spawnName .. '"')
+                        end
                     end
-                else
-                    ImGui.Text('No spawns in list for this zone. Add some!')
+                    
+                    ImGui.EndTable()
                 end
-                ImGui.EndTabItem()
+                else
+                ImGui.Text('No spawns in list for this zone. Add some!')
             end
-
+            ImGui.EndTabItem()
+            
             ImGui.EndTabBar()
         end
-
         ImGui.End()
     end
 end
--- Alert GUI
-local function BuildAlertRows () --Build the Button Rows for the GUI Window
+local function BuildAlertRows() -- Build the Button Rows for the GUI Window
     if zone_id == Zone.ID() then
-        for id, spawnData in pairs(spawnAlerts) do
-            if ImGui.Button(spawnData.CleanName()) then
-               -- CMD('/nav stop')
-                CMD('/nav id '..spawnData.ID())
-                CMD('/target id '..spawnData.ID())
+        -- Start a new table for alerts
+        if ImGui.BeginTable("AlertTable", 2, ImGuiTableFlags_Borders or ImGuiTableFlags_RowBg) then
+            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+            ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+            ImGui.TableHeadersRow()
+            
+            for id, spawnData in pairs(spawnAlerts) do
+                ImGui.TableNextRow()
+                ImGui.TableSetColumnIndex(0)
+                -- Append the spawn's ID to the button label to ensure uniqueness
+                if ImGui.Button(spawnData.CleanName() .. "##" .. spawnData.ID()) then
+                    -- Actions tied to this specific spawn
+                    CMD('/nav id ' .. spawnData.ID())
+                    CMD('/target id ' .. spawnData.ID())
+                end
+                if ImGui.IsItemHovered() then
+                    ImGui.BeginTooltip()
+                    ImGui.Text("Click to Navigate to " .. spawnData.CleanName())
+                    ImGui.EndTooltip()
+                end
+                
+                ImGui.TableSetColumnIndex(1)
+                ImGui.Text("Dist: " .. math.floor(spawnData.Distance() or 0))
             end
-            if ImGui.IsItemHovered() then
-                ImGui.BeginTooltip()
-                ImGui.Text("Click to Navigate to "..spawnData.CleanName())
-                ImGui.EndTooltip()
-            end
-            ImGui.SameLine()
-            ImGui.LabelText("","Dist: " .. math.floor(spawnData.Distance() or 0))
+            ImGui.EndTable()
         end
     end
 end
@@ -442,13 +548,13 @@ function DrawAlertGUI() -- Draw GUI Window
             AlertWindow_Show = false
             if remind > 0 then
                 alertTime = os.time()
-            else
+                else
                 spawnAlerts = {}
             end
-        else
+            else
             BuildAlertRows()
         end
-
+        
         ImGui.End()
     end
 end
@@ -487,7 +593,7 @@ local load_binds = function()
         if cmd == 'on' then
             active = true
             print_ts('\ayAlert Master enabled.')
-        elseif cmd == 'off' then
+            elseif cmd == 'off' then
             active = false
             tGMs, tAnnounce, tPlayers, tSpawns = {}, {}, {}, {}
             print_ts('\ayAlert Master disabled.')
@@ -498,7 +604,7 @@ local load_binds = function()
                 AlertWindowOpen = false
                 AlertWindow_Show = false
                 print_ts('\ayClosing Alert Window.')
-            else
+                else
                 AlertWindowOpen = true
                 AlertWindow_Show = true
                 print_ts('\ayShowing Alert Window.')
@@ -510,39 +616,39 @@ local load_binds = function()
                 SearchWindow_Show = false
                 SearchWindowOpen = false
                 print_ts('\ayClosing Search UI.')
-            else
+                else
                 RefreshZone()
                 SearchWindow_Show = true
                 SearchWindowOpen = true
                 print_ts('\ayShowing Search UI.')
             end
         end
-    	-- Alert Popup On/Off Toggle
+        -- Alert Popup On/Off Toggle
         if cmd == 'doalert' then
             if doAlert then
                 doAlert = false
-				settings[CharConfig]['popup'] = doAlert
-				save_settings()
-				print_ts('\ayAlert PopUp Disabled.')
-            else
-				doAlert = true
-				settings[CharConfig]['popup'] = doAlert
-				save_settings()
-				print_ts('\ayAlert PopUp Enabled.')
+                settings[CharConfig]['popup'] = doAlert
+                save_settings()
+                print_ts('\ayAlert PopUp Disabled.')
+                else
+                doAlert = true
+                settings[CharConfig]['popup'] = doAlert
+                save_settings()
+                print_ts('\ayAlert PopUp Enabled.')
             end
-        end        
-    	-- Beep On/Off Toggle
+        end
+        -- Beep On/Off Toggle
         if cmd == 'beep' then
             if doBeep then
                 doBeep = false
-				settings[CharConfig]['beep'] = doBeep
-				save_settings()
-				print_ts('\ayBeep Alerts Disabled.')
-            else
-				doBeep = true
-				settings[CharConfig]['beep'] = doBeep
-				save_settings()
-				print_ts('\ayBeep Alerts Enabled.')
+                settings[CharConfig]['beep'] = doBeep
+                save_settings()
+                print_ts('\ayBeep Alerts Disabled.')
+                else
+                doBeep = true
+                settings[CharConfig]['beep'] = doBeep
+                save_settings()
+                print_ts('\ayBeep Alerts Enabled.')
             end
         end
         -- radius
@@ -579,7 +685,7 @@ local load_binds = function()
             save_settings()
             spawns = true
             print_ts('\aySpawn alerting enabled.')
-        elseif cmd == 'spawns' and val_str == 'off' then
+            elseif cmd == 'spawns' and val_str == 'off' then
             settings[CharConfig]['spawns'] = false
             save_settings()
             spawns = false
@@ -591,7 +697,7 @@ local load_binds = function()
             save_settings()
             pcs = true
             print_ts('\ayPC alerting enabled.')
-        elseif cmd == 'pcs' and val_str == 'off' then
+            elseif cmd == 'pcs' and val_str == 'off' then
             settings[CharConfig]['pcs'] = false
             save_settings()
             pcs = false
@@ -612,14 +718,40 @@ local load_binds = function()
             settings[zone]['Spawn'..getTableSize(settings[zone])+1] = val_str
             save_settings()
             print_ts('\ayAdded spawn alert for '..val_str..' in '..zone)
-        elseif cmd == 'spawndel' and val_str:len() > 0 then
-            -- remove from the ini
+            elseif cmd == 'spawndel' and val_str:len() > 0 then
+            -- Identify and remove the spawn from the ini
+            local found = false
             for k, v in pairs(settings[zone]) do
-                if settings[zone][k] == val_str then settings[zone][k] = nil end
+                if v == val_str then
+                    settings[zone][k] = nil
+                    found = true
+                    break
+                end
             end
-            save_settings()
-            print_ts('\ayRemoved spawn alert for '..val_str..' in '..zone)
-        elseif cmd == 'spawnlist' then
+            
+            if found then
+                -- Rebuild the table to eliminate gaps
+                local newTable = {}
+                for _, v in pairs(settings[zone]) do
+                    table.insert(newTable, v)
+                end
+                
+                -- Clear the existing table
+                for k in pairs(settings[zone]) do
+                    settings[zone][k] = nil
+                end
+                
+                -- Repopulate the table with renumbered spawns
+                for i, v in ipairs(newTable) do
+                    settings[zone]['Spawn'..i] = v
+                end
+                
+                save_settings()
+                print_ts('\ayRemoved spawn alert for '..val_str..' in '..zone)
+                else
+                print_ts('\aySpawn alert for '..val_str..' not found in '..zone)
+            end
+            elseif cmd == 'spawnlist' then
             if getTableSize(settings[zone]) > 0 then
                 print_ts('\aySpawn Alerts (\a-t'..zone..'\ax): ')
                 local tmp = {}
@@ -636,11 +768,11 @@ local load_binds = function()
                     end
                     if up then
                         print_ts(string.format('\ag[Live] %s ("%s")\ax', name, v))
-                    else
+                        else
                         print_ts(string.format('\a-t[Dead] %s\ax', v))
                     end
                 end
-            else
+                else
                 print_ts('\aySpawn Alerts (\a-t'..zone..'\ax): No alerts found')
             end
         end
@@ -659,20 +791,20 @@ local load_binds = function()
             settings[CharCommands]['Cmd'..getTableSize(settings[CharCommands])+1] = val_str
             save_settings()
             print_ts('\ayAdded Command \"'..val_str..'\"')
-        elseif cmd == 'cmddel' and val_str:len() > 0 then
+            elseif cmd == 'cmddel' and val_str:len() > 0 then
             -- remove from the ini
             for k, v in pairs(settings[CharCommands]) do
                 if settings[CharCommands][k] == val_str then settings[CharCommands][k] = nil end
             end
             save_settings()
             print_ts('\ayRemoved Command \"'..val_str..'\"')
-        elseif cmd == 'cmdlist' then
+            elseif cmd == 'cmdlist' then
             if getTableSize(settings[CharCommands]) > 0 then
                 print_ts('\ayCommands (\a-t'..Me.CleanName()..'\ax): ')
                 for k, v in pairs(settings[CharCommands]) do
                     print_ts('\t\a-t'..k..' - '..v)
                 end
-            else
+                else
                 print_ts('\ayCommands (\a-t'..Me.CleanName()..'\ax): No commands configured.')
             end
         end
@@ -691,48 +823,48 @@ local load_binds = function()
             settings['Ignore']['Ignore'..getTableSize(settings['Ignore'])+1] = val_str
             save_settings()
             print_ts('\ayNow ignoring \"'..val_str..'\"')
-        elseif cmd == 'ignoredel' and val_str:len() > 0 then
+            elseif cmd == 'ignoredel' and val_str:len() > 0 then
             -- remove from the ini
             for k, v in pairs(settings['Ignore']) do
                 if settings['Ignore'][k] == val_str then settings['Ignore'][k] = nil end
             end
             save_settings()
             print_ts('\ayNo longer ignoring \"'..val_str..'\"')
-        elseif cmd == 'ignorelist' then
+            elseif cmd == 'ignorelist' then
             if getTableSize(settings['Ignore']) > 0 then
                 print_ts('\ayIgnore List (\a-t'..Me.CleanName()..'\ax): ')
                 for k, v in pairs(settings['Ignore']) do
                     print_ts('\t\a-t'..k..' - '..v)
                 end
-            else
+                else
                 print_ts('\ayIgnore List (\a-t'..Me.CleanName()..'\ax): No ignore list configured.')
             end
         end
-    		-- Announce Alerts
+        -- Announce Alerts
         if cmd == 'announce' and val_str == 'on' then
             announce = true
             settings[CharConfig]['announce'] = announce
             save_settings()
             print_ts('\ayNow announcing players entering/exiting the zone.')
-        elseif cmd == 'announce' and val_str == 'off'  then
+            elseif cmd == 'announce' and val_str == 'off'  then
             announce = false
             settings[CharConfig]['announce'] = announce
             save_settings()
             print_ts('\ayNo longer announcing players entering/exiting the zone.')
         end
-    		-- GM Checks
+        -- GM Checks
         if cmd == 'gm' and val_str == 'on' then
             gms = true
             settings[CharConfig]['gms'] = gms
             save_settings()
             print_ts('\ayGM Alerts enabled.')
-        elseif cmd == 'gm' and val_str == 'off'  then
+            elseif cmd == 'gm' and val_str == 'off'  then
             gms = false
             settings[CharConfig]['gms'] = gms
             save_settings()
             print_ts('\ayGM Alerts disabled.')
         end
-    		-- Status
+        -- Status
         if cmd == 'status' then print_status() end
         if cmd == nil or cmd == 'help' then
             print_ts('\ayAlert Master Usage:')
@@ -743,16 +875,16 @@ local load_binds = function()
             print_ts('\t\ay/am gm on|off\a-t -- toggle GM alerts')
             print_ts('\t\ay/am pcs on|off\a-t -- toggle PC alerts')
             print_ts('\t\ay/am spawns on|off\a-t -- toggle spawn alerts')
-      		print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
-      		print_ts('\t\ay/am doalert \a-t -- toggle Popup alerts')
-
+            print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
+            print_ts('\t\ay/am doalert \a-t -- toggle Popup alerts')
+            
             print_ts('\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
             print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
             print_ts('\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
             print_ts('\t\ay/am delay #\a-t -- configure alert check delay (seconds)')
             print_ts('\t\ay/am remind #\a-t -- configure alert reminder interval (seconds)')
             print_ts('\t\ay/am popup\a-t -- Toggles Display of Alert Window')
-
+            
             print_ts('\a-y- Ignore List -')
             print_ts('\t\ay/am ignoreadd pc\a-t -- add pc to the ignore list')
             print_ts('\t\ay/am ignoredel pc\a-t -- delete pc from the ignore list')
@@ -762,7 +894,7 @@ local load_binds = function()
             print_ts('\t\ay/am spawndel npc\a-t -- delete monster from the list of tracked spawns')
             print_ts('\t\ay/am spawnlist\a-t -- display monsters being tracked for the current zone')
             print_ts('\t\ay/am show\a-t -- Toggles display of Search Window and Spawns for the current zone')
-
+            
             print_ts('\a-y- Commands - executed when players remain in the alert radius for the reminder interval')
             print_ts('\t\ay/am cmdadd command\a-t -- add command to run when someone enters your alert radius')
             print_ts('\t\ay/am cmddel command\a-t -- delete command to run when someone enters your alert radius')
@@ -778,7 +910,7 @@ local load_settings = function()
     settings_path = config_dir..settings_file
     if file_exists(settings_path) then
         settings = LIP.load(settings_path)
-    else
+        else
         settings = {
             [CharConfig] = defaultConfig,
             [CharCommands] = {},
@@ -797,7 +929,7 @@ local load_settings = function()
     gms = settings[CharConfig]['gms']
     announce = settings[CharConfig]['announce']
     ignoreguild = settings[CharConfig]['ignoreguild']
-  	if settings[CharConfig]['beep'] == nil then
+    if settings[CharConfig]['beep'] == nil then
         settings[CharConfig]['beep'] = false
         save_settings()
     end
@@ -882,8 +1014,8 @@ local spawn_search_npcs = function()
                 local spawn = NearestSpawn(i, search)
                 local id = spawn.ID()
                 if spawn ~= nil and id ~= nil then
-                     -- Case-sensitive comparison using CleanName for exact matching
-                    if spawn.CleanName() == v then
+                    -- Case-sensitive comparison using CleanName for exact matching
+                    if spawn.CleanName() == v or spawn.Name() == v then
                         tmp[id] = spawn
                     end
                 end
@@ -900,7 +1032,7 @@ local check_for_gms = function()
                 if tGMs[name] == nil then
                     tGMs[name] = v
                     print_ts(GetCharZone()..v.name..' '..v.guild..' entered the zone. '..v.distance..' units away.')
-                elseif (remind ~= nil and remind > 0) and tGMs[name] ~= nil and os.difftime(os.time(), tGMs[name].time) > remind then
+                    elseif (remind ~= nil and remind > 0) and tGMs[name] ~= nil and os.difftime(os.time(), tGMs[name].time) > remind then
                     tGMs[name].time = v.time
                     print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
                 end
@@ -926,7 +1058,7 @@ local check_for_pcs = function()
                     tPlayers[name] = v
                     print_ts(GetCharZone()..v.name..' '..v.guild..' entered the alert radius. '..v.distance..' units away.')
                     -- run commands here
-                elseif (remind ~= nil and remind > 0) and tPlayers[name] ~= nil and os.difftime(os.time(), tPlayers[name].time) > remind then
+                    elseif (remind ~= nil and remind > 0) and tPlayers[name] ~= nil and os.difftime(os.time(), tPlayers[name].time) > remind then
                     tPlayers[name].time = v.time
                     print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
                     run_char_commands()
@@ -954,7 +1086,7 @@ local check_for_spawns = function()
                     if check_safe_zone() ~= true then
                         print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
                         spawnAlertsUpdated = true
-                    end    
+                    end
                     tSpawns[id] = v
                     spawnAlerts[id] = v
                     numAlerts =numAlerts + 1
@@ -977,13 +1109,13 @@ local check_for_spawns = function()
             end
             -- Check if there are any entries in the spawnAlerts table
             if next(spawnAlerts) ~= nil and spawnAlertsUpdated then
-               if doAlert then
+                if doAlert then
                     AlertWindow_Show = true
                     AlertWindowOpen = true
                     DrawAlertGUI()
                 end
                 alertTime = os.time()
-				if doBeep then CMD('/beep') end
+                if doBeep then CMD('/beep') end
             end
         end
     end
@@ -1030,14 +1162,16 @@ local loop = function()
         end
         if Me.Zoning() then numAlerts = 0 end
         --CMD('/echo '..numAlerts)
-        if ((os.time() - alertTime) > (remind * 60) and AlertWindow_Show == false and numAlerts >0) then
-            if doAlert then
-                AlertWindow_Show = true
-                AlertWindowOpen = true
-                DrawAlertGUI()
+        if check_safe_zone() ~= true then
+            if ((os.time() - alertTime) > (remind * 60) and AlertWindow_Show == false and numAlerts >0) then
+                if doAlert then
+                    AlertWindow_Show = true
+                    AlertWindowOpen = true
+                    DrawAlertGUI()
+                end
+                if doBeep then CMD('/beep') end
+                alertTime = os.time()
             end
-      		if doBeep then CMD('/beep') end
-            alertTime = os.time()
         end
         if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
         curZone = TLO.Zone.Name
