@@ -260,29 +260,19 @@ local function DrawRuleRow(entry)
     end
     ImGui.TableNextColumn()
     ImGui.Text('%s', entry.MobName)
-    if entry.MobID ~= nil then
-        if ImGui.IsItemHovered() and ImGui.IsMouseReleased(ImGuiMouseButton.Right) then CMD('/target id '..entry.MobID) end
-    end
+
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobLvl))
-    if entry.MobLvl ~= nil then
-        if ImGui.IsItemHovered() and ImGui.IsMouseReleased(ImGuiMouseButton.Right) then CMD('/target id '..entry.MobID) end
-    end
+
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobDist))
-    if entry.MobID ~= nil then
-        if ImGui.IsItemHovered() and ImGui.IsMouseReleased(ImGuiMouseButton.Right) then CMD('/target id '..entry.MobID) end
-    end
+
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobID))
-    if entry.MobID ~= nil then
-        if ImGui.IsItemHovered() and ImGui.IsMouseReleased(ImGuiMouseButton.Right) then CMD('/target id '..entry.MobID) end
-    end
+
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobLoc))
-    if entry.MobID ~= nil then
-        if ImGui.IsItemHovered() and ImGui.IsMouseReleased(ImGuiMouseButton.Right) then CMD('/target id '..entry.MobID) end
-    end
+
     ImGui.TableNextColumn()
     ImGui.SameLine()
     if ImGui.SmallButton("Add##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
@@ -478,7 +468,6 @@ local function DrawSearchWindow()
                             -- Right-click interaction uses the original spawnName
                             if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
                                 CMD('/nav spawn "' .. spawnName .. '"')
-                                CMD('/target ${Spawn[npc ' .. spawnName .. ']}')
                             end
                         end
                         
@@ -523,7 +512,6 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
                 if ImGui.Button(spawnData.CleanName() .. "##" .. spawnData.ID()) then
                     -- Actions tied to this specific spawn
                     CMD('/nav id ' .. spawnData.ID())
-                    CMD('/target id ' .. spawnData.ID())
                 end
                 if ImGui.IsItemHovered() then
                     ImGui.BeginTooltip()
