@@ -43,7 +43,7 @@ local Zone = TLO.Zone
 local curZone = Zone.Name()
 local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
-local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200}
+local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
 local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
@@ -1002,6 +1002,13 @@ local load_settings = function()
     doAlert = settings[CharConfig]['popup']
     DistColorRanges.orange = settings[CharConfig]['distmid']
     DistColorRanges.red = settings[CharConfig]['distfar']
+    if GUI_Main.Locked then
+        SearchWindow_Show = true
+        SearchWindowOpen = true
+        else
+        SearchWindow_Show = false
+        SearchWindowOpen = false
+    end
     -- setup safe zone "set"
     for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
@@ -1167,7 +1174,7 @@ local check_for_spawns = function()
                         numAlerts = numAlerts - 1
                     end
                 end
-            else
+                else
                 AlertWindow_Show = false
                 AlertWindowOpen = false
             end
