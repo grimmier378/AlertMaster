@@ -53,6 +53,7 @@ local AlertWindowOpen = false
 local SearchWindow_Show = false
 local SearchWindowOpen = false
 local currentTab = "zone"
+local newSpawnName = ''
 ---@class
 local DistColorRanges = {
     orange = 600, -- distance the color changes from green to orange
@@ -295,7 +296,6 @@ local function RefreshZone()
     GUI_Main.Refresh.Sort.Mobs = true
     GUI_Main.Refresh.Table.Mobs = false
 end
-
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
     if ImGui.SmallButton(Icons.FA_USER_PLUS) then CMD('/am spawnadd "'..entry.MobName..'"') end
@@ -335,6 +335,7 @@ local function DrawSearchWindow()
         GUI_Main.Flags = bit32.band(GUI_Main.Flags, bit32.bnot(ImGuiWindowFlags.NoMove), bit32.bnot(ImGuiWindowFlags.NoResize))
     end
     if SearchWindowOpen then
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
         if mq.TLO.Me.Zoning() then return end
         SearchWindowOpen = ImGui.Begin("Alert Master Search Window", SearchWindowOpen, GUI_Main.Flags)
         --   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
@@ -365,7 +366,7 @@ local function DrawSearchWindow()
             --ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_ALARM) then CMD('/am doalert') end
             ImGui.PopStyleColor(1)
-        else
+            else
             ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
             -- ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_ALARM_OFF) then CMD('/am doalert') end
@@ -383,7 +384,7 @@ local function DrawSearchWindow()
             --  ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.FA_BELL_O) then CMD('/am beep') end
             ImGui.PopStyleColor(1)
-        else
+            else
             ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
             -- ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.FA_BELL_SLASH_O) then CMD('/am beep') end
@@ -401,7 +402,7 @@ local function DrawSearchWindow()
             --    ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_VISIBILITY) then CMD('/am popup') end
             ImGui.PopStyleColor(1)
-        else
+            else
             ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for inactive state
             --   ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_VISIBILITY_OFF) then CMD('/am popup') end
@@ -424,74 +425,66 @@ local function DrawSearchWindow()
                 currentTab = "npcList"
             end
             ImGui.PopStyleColor(1)
-        else
+            else
             ImGui.PushStyleColor(ImGuiCol.Button, 0.2, 0.4, 0.8, 0.4) -- Red for inactive state
             if ImGui.Button(tabLabel) then
                 currentTab = "npcList"
             end
             ImGui.PopStyleColor(1)
         end
-
-        -- if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.TabListPopupButton) then
-        -- Conditional rendering based on currentTab
         if currentTab == "zone" then
-           -- if ImGui.BeginTabItem(string.format('%s', curZone)) then
-                --ImGui.PushItemWidth(-95)
-                
-                local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
-                -- ImGui.PopItemWidth()
-                if selected and GUI_Main.Search ~= searchText then
-                    GUI_Main.Search = searchText
-                    GUI_Main.Refresh.Sort.Rules = true
-                    GUI_Main.Refresh.Table.Unhandled = true
-                end
-                ImGui.SameLine()
-                if ImGui.Button("Clear##ClearRulesSearch") then
-                    GUI_Main.Search = ''
+            local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
+            -- ImGui.PopItemWidth()
+            if selected and GUI_Main.Search ~= searchText then
+                GUI_Main.Search = searchText
+                GUI_Main.Refresh.Sort.Rules = true
+                GUI_Main.Refresh.Table.Unhandled = true
+            end
+            ImGui.SameLine()
+            if ImGui.Button("Clear##ClearRulesSearch") then
+                GUI_Main.Search = ''
+                GUI_Main.Refresh.Sort.Rules = false
+                GUI_Main.Refresh.Table.Unhandled = true
+            end
+            ImGui.Separator()
+            if ImGui.BeginTable('##RulesTable', 6, GUI_Main.Table.Flags) then
+                ImGui.TableSetupScrollFreeze(0, 1)
+                ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
+                ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName)
+                ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobLvl)
+                ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, GUI_Main.Table.Column_ID.MobDist)
+                ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobID)
+                ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, GUI_Main.Table.Column_ID.MobLoc)
+                ImGui.TableHeadersRow()
+                local sortSpecs = ImGui.TableGetSortSpecs()
+                if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
+                    if #Table_Cache.Unhandled > 0 then
+                        GUI_Main.Table.SortSpecs = sortSpecs
+                        table.sort(Table_Cache.Unhandled, TableSortSpecs)
+                        GUI_Main.Table.SortSpecs = nil
+                    end
+                    sortSpecs.SpecsDirty = false
                     GUI_Main.Refresh.Sort.Rules = false
-                    GUI_Main.Refresh.Table.Unhandled = true
                 end
-                ImGui.Separator()
-                if ImGui.BeginTable('##RulesTable', 6, GUI_Main.Table.Flags) then
-                    ImGui.TableSetupScrollFreeze(0, 1)
-                    ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
-                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName)
-                    ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobLvl)
-                    ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, GUI_Main.Table.Column_ID.MobDist)
-                    ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobID)
-                    ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, GUI_Main.Table.Column_ID.MobLoc)
-                    ImGui.TableHeadersRow()
-                    local sortSpecs = ImGui.TableGetSortSpecs()
-                    if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
-                        if #Table_Cache.Unhandled > 0 then
-                            GUI_Main.Table.SortSpecs = sortSpecs
-                            table.sort(Table_Cache.Unhandled, TableSortSpecs)
-                            GUI_Main.Table.SortSpecs = nil
-                        end
-                        sortSpecs.SpecsDirty = false
-                        GUI_Main.Refresh.Sort.Rules = false
+                local clipper = ImGuiListClipper.new()
+                clipper:Begin(#Table_Cache.Unhandled)
+                while clipper:Step() do
+                    for i = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do
+                        local entry = Table_Cache.Unhandled[i + 1]
+                        ImGui.PushID(entry.ID)
+                        ImGui.TableNextRow()
+                        DrawRuleRow(entry)
+                        ImGui.PopID()
                     end
-                    local clipper = ImGuiListClipper.new()
-                    clipper:Begin(#Table_Cache.Unhandled)
-                    while clipper:Step() do
-                        for i = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do
-                            local entry = Table_Cache.Unhandled[i + 1]
-                            ImGui.PushID(entry.ID)
-                            ImGui.TableNextRow()
-                            DrawRuleRow(entry)
-                            ImGui.PopID()
-                        end
-                    end
-                    clipper:End()
-                    ImGui.EndTable()
                 end
-        
+                clipper:End()
+                ImGui.EndTable()
+            end
             elseif currentTab == "npcList" then
-            --  if ImGui.BeginTabItem(tabLabel) then
-            --ImGui.PopStyleColor(4)
             -- Tab for NPC List
             local npcs = settings[Zone.ShortName()] or {}
-            local newSpawnName, selected = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
+            local changed
+            newSpawnName, changed = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
             if ImGui.IsItemHovered() then
                 ImGui.BeginTooltip()
                 ImGui.Text("Enter Spawn Name this is CaseSensative,\n also accepts variables like: ${Target.CleanName} and ${Target.Name}")
@@ -499,12 +492,14 @@ local function DrawSearchWindow()
             end
             ImGui.SameLine()
             -- Button to add the new spawn
-            if ImGui.Button("Add Spawn") then
+            if ImGui.Button("Add Spawn") and newSpawnName ~= "" then
                 CMD('/am spawnadd "'..newSpawnName..'"')
-                newSpawnName = ""
+                print(newSpawnName)  -- For debugging
+                newSpawnName = ""  -- Clear the input text after adding
                 -- Refresh npcs from settings in case it was updated
                 npcs = settings[Zone.ShortName()] or {}
             end
+            
             if ImGui.IsItemHovered() then
                 ImGui.BeginTooltip()
                 ImGui.Text("Add to SpawnList")
@@ -579,8 +574,9 @@ local function DrawSearchWindow()
                 end
                 else
                 ImGui.Text('No spawns in list for this zone. Add some!')
+            end
         end
-    end
+        ImGui.PopStyleVar(1)
         ImGui.End()
     end
 end
@@ -617,6 +613,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 end
 function DrawAlertGUI() -- Draw GUI Window
     if AlertWindowOpen then
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
         if mq.TLO.Me.Zoning() then return end
         AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
         if not opened then
@@ -630,6 +627,7 @@ function DrawAlertGUI() -- Draw GUI Window
             else
             BuildAlertRows()
         end
+        ImGui.PopStyleVar(1)
         ImGui.End()
     end
 end
