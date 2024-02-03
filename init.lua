@@ -52,6 +52,7 @@ local AlertWindow_Show = false
 local AlertWindowOpen = false
 local SearchWindow_Show = false
 local SearchWindowOpen = false
+local currentTab = "zone"
 ---@class
 local DistColorRanges = {
     orange = 600, -- distance the color changes from green to orange
@@ -80,6 +81,7 @@ local GUI_Main = {
     Locked = false,
     Flags = bit32.bor(
         ImGuiWindowFlags.None
+        --ImGuiWindowFlags.NoSavedSettings
     ),
     Refresh = {
         Sort = {
@@ -296,7 +298,7 @@ end
 
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
-    if ImGui.SmallButton("Add##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
+    if ImGui.SmallButton(Icons.FA_USER_PLUS) then CMD('/am spawnadd "'..entry.MobName..'"') end
     if ImGui.IsItemHovered() then
         ImGui.BeginTooltip()
         ImGui.Text("Add to Spawn List")
@@ -359,15 +361,15 @@ local function DrawSearchWindow()
         ImGui.SameLine()
         -- Alert Popup Toggle Button
         if doAlert then
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for enabled
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("DoPopup") then CMD('/am doalert') end
-            ImGui.PopStyleColor(2)
-            else
-            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for disabled
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("DoPopup") then CMD('/am doalert') end
-            ImGui.PopStyleColor(2)
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+            --ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.Button(Icons.MD_ALARM) then CMD('/am doalert') end
+            ImGui.PopStyleColor(1)
+        else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+            -- ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.Button(Icons.MD_ALARM_OFF) then CMD('/am doalert') end
+            ImGui.PopStyleColor(1)
         end
         if ImGui.IsItemHovered() then
             ImGui.BeginTooltip()
@@ -377,15 +379,15 @@ local function DrawSearchWindow()
         ImGui.SameLine()
         -- Beep Alert Toggle Button
         if doBeep then
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for enabled
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("DoBeep") then CMD('/am beep') end
-            ImGui.PopStyleColor(2)
-            else
-            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for disabled
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("DoBeep") then CMD('/am beep') end
-            ImGui.PopStyleColor(2)
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+            --  ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.Button(Icons.FA_BELL_O) then CMD('/am beep') end
+            ImGui.PopStyleColor(1)
+        else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+            -- ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.Button(Icons.FA_BELL_SLASH_O) then CMD('/am beep') end
+            ImGui.PopStyleColor(1)
         end
         if ImGui.IsItemHovered() then
             ImGui.BeginTooltip()
@@ -395,26 +397,47 @@ local function DrawSearchWindow()
         ImGui.SameLine()
         -- Alert Window Toggle Button
         if AlertWindowOpen then
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for active state
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
-            ImGui.PopStyleColor(2)
-            else
-            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for inactive state
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
-            ImGui.PopStyleColor(2)
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+            --    ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.Button(Icons.MD_VISIBILITY) then CMD('/am popup') end
+            ImGui.PopStyleColor(1)
+        else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for inactive state
+            --   ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.Button(Icons.MD_VISIBILITY_OFF) then CMD('/am popup') end
+            ImGui.PopStyleColor(1)
         end
         if ImGui.IsItemHovered() then
             ImGui.BeginTooltip()
             ImGui.Text("Toggle Popup Alerts On\\Off")
             ImGui.EndTooltip()
         end
-        -- ImGui.PopStyleVar()
-        -- ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
-        if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.TabListPopupButton) then
-            if ImGui.BeginTabItem(string.format('%s', curZone)) then
+        if ImGui.Button(Zone.Name()) then
+            currentTab = "zone"
+        end
+        ImGui.SameLine()
+        local tabLabel = "NPC List"
+        if next(spawnAlerts) ~= nil then
+            tabLabel = Icons.FA_BULLHORN .. " NPC List " .. Icons.FA_BULLHORN
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for inactive state
+            if ImGui.Button(tabLabel) then
+                currentTab = "npcList"
+            end
+            ImGui.PopStyleColor(1)
+        else
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.2, 0.4, 0.8, 0.4) -- Red for inactive state
+            if ImGui.Button(tabLabel) then
+                currentTab = "npcList"
+            end
+            ImGui.PopStyleColor(1)
+        end
+
+        -- if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.TabListPopupButton) then
+        -- Conditional rendering based on currentTab
+        if currentTab == "zone" then
+           -- if ImGui.BeginTabItem(string.format('%s', curZone)) then
                 --ImGui.PushItemWidth(-95)
+                
                 local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
                 -- ImGui.PopItemWidth()
                 if selected and GUI_Main.Search ~= searchText then
@@ -431,8 +454,8 @@ local function DrawSearchWindow()
                 ImGui.Separator()
                 if ImGui.BeginTable('##RulesTable', 6, GUI_Main.Table.Flags) then
                     ImGui.TableSetupScrollFreeze(0, 1)
-                    ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.NoSort, 30, GUI_Main.Table.Column_ID.Remove)
-                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName, 150)
+                    ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
+                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName)
                     ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobLvl)
                     ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, GUI_Main.Table.Column_ID.MobDist)
                     ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobID)
@@ -462,22 +485,13 @@ local function DrawSearchWindow()
                     clipper:End()
                     ImGui.EndTable()
                 end
-                ImGui.EndTabItem()
-            end
-            if next(spawnAlerts) ~= nil then
-                -- Change tab background color to something noticeable
-                ImGui.PushStyleColor(ImGuiCol.Tab, 1.0, 0.3, 0.3, 1.0)
-                ImGui.PushStyleColor(ImGuiCol.TabHovered, 1.0, 0.4, 0.4, 1.0)
-                ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-                ImGui.PushStyleColor(ImGuiCol.TabActive, 0.4, 1.0, 0.4, 1.0)
-                ImGui.BeginTabItem("NPC List")
-                ImGui.PopStyleColor(4)
-                else
-                ImGui.BeginTabItem("NPC List")
-            end
+        
+            elseif currentTab == "npcList" then
+            --  if ImGui.BeginTabItem(tabLabel) then
+            --ImGui.PopStyleColor(4)
             -- Tab for NPC List
             local npcs = settings[Zone.ShortName()] or {}
-            newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
+            local newSpawnName, selected = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
             if ImGui.IsItemHovered() then
                 ImGui.BeginTooltip()
                 ImGui.Text("Enter Spawn Name this is CaseSensative,\n also accepts variables like: ${Target.CleanName} and ${Target.Name}")
@@ -520,7 +534,7 @@ local function DrawSearchWindow()
                     -- Set up table headers
                     ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
                     ImGui.TableSetupColumn("Zone", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
-                    ImGui.TableSetupColumn("Remove")
+                    ImGui.TableSetupColumn(Icons.MD_DELETE)
                     ImGui.TableHeadersRow()
                     for index, npc in ipairs(sortedNpcs) do
                         local spawnName = npc.name
@@ -549,8 +563,10 @@ local function DrawSearchWindow()
                         ImGui.TableNextColumn()
                         ImGui.Text(Zone.ShortName())
                         -- Correctly concatenate 'id' as a string for ImGui identifiers
+                        local btnIcon = Icons.MD_DELETE
+                        local buttonLabel = btnIcon .. "##Remove" .. tostring(index)
                         ImGui.TableNextColumn()
-                        if ImGui.SmallButton('Remove##' .. tostring(index)) then
+                        if ImGui.SmallButton(buttonLabel) then
                             CMD('/am spawndel "' .. spawnName .. '"')
                         end
                         if ImGui.IsItemHovered() then
@@ -563,10 +579,8 @@ local function DrawSearchWindow()
                 end
                 else
                 ImGui.Text('No spawns in list for this zone. Add some!')
-            end
-            ImGui.EndTabItem()
-            ImGui.EndTabBar()
         end
+    end
         ImGui.End()
     end
 end
