@@ -76,7 +76,7 @@ local spawnListFlags = bit32.bor(
 local GUI_Main = {
     Open  = false,
     Show  = false,
-    Locked = false, 
+    Locked = false,
     Flags = bit32.bor(
         ImGuiWindowFlags.None
     ),
@@ -263,15 +263,29 @@ local function RefreshZone()
 end
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
-    if ImGui.SmallButton("Nav##" .. entry.ID) then
-        CMD('/nav id '..entry.MobID)
-        printf('\ayMoving to \ag%s',entry.MobName)
-    end
-    ImGui.SameLine()
+    -- if ImGui.SmallButton("Nav##" .. entry.ID) then
+    --     CMD('/nav id '..entry.MobID)
+    --     printf('\ayMoving to \ag%s',entry.MobName)
+    -- end
+    -- ImGui.SameLine()
     if ImGui.SmallButton("Add##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
+    if ImGui.IsItemHovered() then
+        ImGui.BeginTooltip()
+        ImGui.Text("Add to Spawn List")
+        ImGui.EndTooltip()
+    end
     ImGui.TableNextColumn()
     ImGui.Text('%s', entry.MobName)
-    
+    if ImGui.IsItemHovered() then
+        ImGui.BeginTooltip()
+        ImGui.Text("Right-Click to Navigate")
+        ImGui.EndTooltip()
+        
+        -- Right-click interaction uses the original spawnName
+        if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
+            CMD('/nav id "' .. entry.MobID .. '"')
+        end
+    end
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobLvl))
     
@@ -307,7 +321,7 @@ local function DrawSearchWindow()
         ImGui.SameLine()
         -- if ImGui.Button(GUI_Main.Locked and "Unlock Window" or "Lock Window") then
         --     ToggleWindowLock()
-        -- end 
+        -- end
         -- if ImGui.SmallButton("Refresh Zone") then RefreshZone() end
         
         local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
@@ -316,22 +330,12 @@ local function DrawSearchWindow()
             --ImGuiWindowFlags.NoMove
             GUI_Main.Locked = not GUI_Main.Locked
         end
-        
-        
-        ImGui.SameLine()
-        -- Alert Window Toggle Button
-        if AlertWindowOpen then
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for active state
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
-            ImGui.PopStyleColor(2)
-            else
-            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for inactive state
-            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
-            ImGui.PopStyleColor(2)
+        if ImGui.IsItemHovered() then
+            ImGui.BeginTooltip()
+            ImGui.Text("Lock Window")
+            ImGui.EndTooltip()
         end
-        
+        ImGui.SameLine()
         -- Alert Popup Toggle Button
         if doAlert then
             ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for enabled
@@ -344,9 +348,12 @@ local function DrawSearchWindow()
             if ImGui.SmallButton("DoPopup") then CMD('/am doalert') end
             ImGui.PopStyleColor(2)
         end
-        
+        if ImGui.IsItemHovered() then
+            ImGui.BeginTooltip()
+            ImGui.Text("Open\\Close Alert Popup Window")
+            ImGui.EndTooltip()
+        end
         ImGui.SameLine()
-        
         -- Beep Alert Toggle Button
         if doBeep then
             ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for enabled
@@ -359,7 +366,28 @@ local function DrawSearchWindow()
             if ImGui.SmallButton("DoBeep") then CMD('/am beep') end
             ImGui.PopStyleColor(2)
         end
-        
+        if ImGui.IsItemHovered() then
+            ImGui.BeginTooltip()
+            ImGui.Text("Toggle Beep Alerts On\\Off")
+            ImGui.EndTooltip()
+        end
+        -- Alert Window Toggle Button
+        if AlertWindowOpen then
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for active state
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
+            ImGui.PopStyleColor(2)
+            else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 1.0) -- Red for inactive state
+            ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
+            if ImGui.SmallButton("Toggle Alert Window") then CMD('/am popup') end
+            ImGui.PopStyleColor(2)
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.BeginTooltip()
+            ImGui.Text("Toggle Popup Alerts On\\Off")
+            ImGui.EndTooltip()
+        end
         ImGui.PopStyleVar()
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
         if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.Reorderable) then
@@ -440,7 +468,11 @@ local function DrawSearchWindow()
                 -- Refresh npcs from settings in case it was updated
                 npcs = settings[Zone.ShortName()] or {}
             end
-            
+            if ImGui.IsItemHovered() then
+                ImGui.BeginTooltip()
+                ImGui.Text("Add to SpawnList")
+                ImGui.EndTooltip()
+            end
             -- Populate and sort sortedNpcs right before using it
             local sortedNpcs = {}
             for id, spawnName in pairs(npcs) do
@@ -506,6 +538,11 @@ local function DrawSearchWindow()
                         ImGui.TableNextColumn()
                         if ImGui.SmallButton('Remove##' .. tostring(index)) then
                             CMD('/am spawndel "' .. spawnName .. '"')
+                        end
+                        if ImGui.IsItemHovered() then
+                            ImGui.BeginTooltip()
+                            ImGui.Text("Delete Spawn From SpawnList")
+                            ImGui.EndTooltip()
                         end
                     end
                     
