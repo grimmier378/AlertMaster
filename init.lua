@@ -61,7 +61,7 @@ local Table_Cache = {
     Unhandled = {},
     Mobs = {},
 }
-local alertFlags = bit32.bor(ImGuiWindowFlags.None)
+local alertFlags = bit32.bor(ImGuiWindowFlags.NoCollapse)
 local spawnListFlags = bit32.bor(
     ImGuiTableFlags.Resizable,
     ImGuiTableFlags.RowBg,
@@ -311,7 +311,7 @@ local function DrawSearchWindow()
         
         if mq.TLO.Me.Zoning() then return end
         SearchWindowOpen = ImGui.Begin("Alert Master Search Window", SearchWindowOpen, GUI_Main.Flags)
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
+     --   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
         if #Table_Cache.Unhandled > 0 then
             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.3, 0.3, 1))
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImVec4(1, 0.4, 0.4, 1))
@@ -388,13 +388,13 @@ local function DrawSearchWindow()
             ImGui.Text("Toggle Popup Alerts On\\Off")
             ImGui.EndTooltip()
         end
-        ImGui.PopStyleVar()
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
-        if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.Reorderable) then
+       -- ImGui.PopStyleVar()
+       -- ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
+        if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.TabListPopupButton) then
             if ImGui.BeginTabItem(string.format('%s', curZone)) then
-                ImGui.PushItemWidth(-95)
+                --ImGui.PushItemWidth(-95)
                 local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
-                ImGui.PopItemWidth()
+               -- ImGui.PopItemWidth()
                 if selected and GUI_Main.Search ~= searchText then
                     GUI_Main.Search = searchText
                     GUI_Main.Refresh.Sort.Rules = true
@@ -409,12 +409,12 @@ local function DrawSearchWindow()
                 ImGui.Separator()
                 if ImGui.BeginTable('##RulesTable', 6, GUI_Main.Table.Flags) then
                     ImGui.TableSetupScrollFreeze(0, 1)
-                    ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.NoSort, 2, GUI_Main.Table.Column_ID.Remove)
-                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobName, 150)
-                    ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobLvl)
-                    ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobDist)
-                    ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobID)
-                    ImGui.TableSetupColumn("Loc (x,y,z)", ImGuiTableColumnFlags.NoSort, 8, GUI_Main.Table.Column_ID.MobLoc)
+                    ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.NoSort, 30, GUI_Main.Table.Column_ID.Remove)
+                    ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName, 150)
+                    ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobLvl)
+                    ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, GUI_Main.Table.Column_ID.MobDist)
+                    ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobID)
+                    ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, GUI_Main.Table.Column_ID.MobLoc)
                     ImGui.TableHeadersRow()
                     local sortSpecs = ImGui.TableGetSortSpecs()
                     if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
@@ -569,17 +569,17 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
             for id, spawnData in pairs(spawnAlerts) do
                 ImGui.TableNextRow()
                 ImGui.TableSetColumnIndex(0)
-                -- Append the spawn's ID to the button label to ensure uniqueness
-                if ImGui.Button(spawnData.CleanName() .. "##" .. spawnData.ID()) then
-                    -- Actions tied to this specific spawn
-                    CMD('/nav id ' .. spawnData.ID())
-                end
+                ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 0.8, 0.0, 0.8)
+                ImGui.Text(spawnData.CleanName())
+                ImGui.PopStyleColor(1)
                 if ImGui.IsItemHovered() then
                     ImGui.BeginTooltip()
-                    ImGui.Text("Click to Navigate to " .. spawnData.CleanName())
+                    ImGui.Text("Right-Click to Navigate: "..spawnData.CleanName())
                     ImGui.EndTooltip()
-                end
-                
+                    if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
+                        CMD('/nav id "' .. spawnData.ID() .. '"')
+                    end
+                end              
                 ImGui.TableSetColumnIndex(1)
                 ImGui.Text("Dist: " .. math.floor(spawnData.Distance() or 0))
             end
@@ -1149,7 +1149,7 @@ local check_for_spawns = function()
                             print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax was killed or despawned.')
                             AlertWindow_Show = false
                             AlertWindowOpen = false
-                            spawnAlertsUpdated = true
+                            spawnAlertsUpdated = false
                         end
                         tSpawns[id] = nil
                         spawnAlerts[id] = nil
@@ -1162,7 +1162,7 @@ local check_for_spawns = function()
                 if doAlert then
                     AlertWindow_Show = true
                     AlertWindowOpen = true
-                    DrawAlertGUI()
+                    if not AlertWindowOpen then DrawAlertGUI() end
                 end
                 alertTime = os.time()
                 if doBeep then CMD('/beep') end
@@ -1217,7 +1217,7 @@ local loop = function()
                 if doAlert then
                     AlertWindow_Show = true
                     AlertWindowOpen = true
-                    DrawAlertGUI()
+                    if not AlertWindowOpen then DrawAlertGUI() end
                 end
                 if doBeep then CMD('/beep') end
                 alertTime = os.time()
