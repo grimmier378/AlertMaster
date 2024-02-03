@@ -1124,8 +1124,6 @@ local check_for_spawns = function()
                     if tmp[id] == nil then
                         if check_safe_zone() ~= true then
                             print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax was killed or despawned.')
-                            AlertWindow_Show = false
-                            AlertWindowOpen = false
                             spawnAlertsUpdated = false
                         end
                         tSpawns[id] = nil
@@ -1133,6 +1131,9 @@ local check_for_spawns = function()
                         numAlerts = numAlerts - 1
                     end
                 end
+            else
+                AlertWindow_Show = false
+                AlertWindowOpen = false
             end
             -- Check if there are any entries in the spawnAlerts table
             if next(spawnAlerts) ~= nil and spawnAlertsUpdated then
