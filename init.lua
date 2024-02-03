@@ -47,7 +47,6 @@ local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms 
 local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
-
 -- [[ UI ]] --
 local AlertWindow_Show = false
 local AlertWindowOpen = false
@@ -133,7 +132,6 @@ local GUI_Main = {
 local function ToggleWindowLock()
     GUI_Main.Locked = not GUI_Main.Locked -- Toggle the state
 end
-
 function isSpawnInAlerts(spawnName, spawnAlerts)
     for _, spawnData in pairs(spawnAlerts) do
         if spawnData.CleanName() == spawnName or spawnData.Name() == spawnName then
@@ -261,13 +259,20 @@ local function RefreshZone()
     GUI_Main.Refresh.Sort.Mobs = true
     GUI_Main.Refresh.Table.Mobs = false
 end
+local function ColorDistance(distance)
+    if distance < 600 then
+        -- Green color for distance < 600
+        ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 1.0, 0.0, 1.0) -- RGBA
+        elseif distance >= 600 and distance <= 1100 then
+        -- Yellowish orange for distance between 600 and 1100
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.76, 0.03, 1.0) -- RGBA
+        else
+        -- Red color for distance > 1100
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 0.0, 1.0) -- RGBA
+    end
+end
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
-    -- if ImGui.SmallButton("Nav##" .. entry.ID) then
-    --     CMD('/nav id '..entry.MobID)
-    --     printf('\ayMoving to \ag%s',entry.MobName)
-    -- end
-    -- ImGui.SameLine()
     if ImGui.SmallButton("Add##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
     if ImGui.IsItemHovered() then
         ImGui.BeginTooltip()
@@ -280,7 +285,6 @@ local function DrawRuleRow(entry)
         ImGui.BeginTooltip()
         ImGui.Text("Right-Click to Navigate")
         ImGui.EndTooltip()
-        
         -- Right-click interaction uses the original spawnName
         if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
             CMD('/nav id "' .. entry.MobID .. '"')
@@ -288,19 +292,17 @@ local function DrawRuleRow(entry)
     end
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobLvl))
-    
     ImGui.TableNextColumn()
-    ImGui.Text('%s', (entry.MobDist))
-    
+    local distance = entry.MobDist
+    ColorDistance(distance)
+    ImGui.Text(distance)
+    ImGui.PopStyleColor()
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobID))
-    
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobLoc))
     ImGui.TableNextColumn()
-    
 end
-
 local function DrawSearchWindow()
     if GUI_Main.Locked then
         GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
@@ -308,10 +310,9 @@ local function DrawSearchWindow()
         GUI_Main.Flags = bit32.band(GUI_Main.Flags, bit32.bnot(ImGuiWindowFlags.NoMove), bit32.bnot(ImGuiWindowFlags.NoResize))
     end
     if SearchWindowOpen then
-        
         if mq.TLO.Me.Zoning() then return end
         SearchWindowOpen = ImGui.Begin("Alert Master Search Window", SearchWindowOpen, GUI_Main.Flags)
-     --   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
+        --   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
         if #Table_Cache.Unhandled > 0 then
             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.3, 0.3, 1))
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImVec4(1, 0.4, 0.4, 1))
@@ -319,11 +320,6 @@ local function DrawSearchWindow()
         end
         if #Table_Cache.Unhandled > 0 then ImGui.PopStyleColor(3) end
         ImGui.SameLine()
-        -- if ImGui.Button(GUI_Main.Locked and "Unlock Window" or "Lock Window") then
-        --     ToggleWindowLock()
-        -- end
-        -- if ImGui.SmallButton("Refresh Zone") then RefreshZone() end
-        
         local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
         Icons.FA_UNLOCK .. '##lockTablButton'
         if ImGui.Button(lockedIcon) then
@@ -388,13 +384,13 @@ local function DrawSearchWindow()
             ImGui.Text("Toggle Popup Alerts On\\Off")
             ImGui.EndTooltip()
         end
-       -- ImGui.PopStyleVar()
-       -- ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
+        -- ImGui.PopStyleVar()
+        -- ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
         if ImGui.BeginTabBar('##TabBar',ImGuiTabBarFlags.TabListPopupButton) then
             if ImGui.BeginTabItem(string.format('%s', curZone)) then
                 --ImGui.PushItemWidth(-95)
                 local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
-               -- ImGui.PopItemWidth()
+                -- ImGui.PopItemWidth()
                 if selected and GUI_Main.Search ~= searchText then
                     GUI_Main.Search = searchText
                     GUI_Main.Refresh.Sort.Rules = true
@@ -443,7 +439,6 @@ local function DrawSearchWindow()
                 ImGui.EndTabItem()
             end
             if next(spawnAlerts) ~= nil then
-                
                 -- Change tab background color to something noticeable
                 ImGui.PushStyleColor(ImGuiCol.Tab, 1.0, 0.3, 0.3, 1.0)
                 ImGui.PushStyleColor(ImGuiCol.TabHovered, 1.0, 0.4, 0.4, 1.0)
@@ -454,12 +449,14 @@ local function DrawSearchWindow()
                 else
                 ImGui.BeginTabItem("NPC List")
             end
-            
             -- Tab for NPC List
-            
-            
             local npcs = settings[Zone.ShortName()] or {}
             newSpawnName, inputChanged = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
+            if ImGui.IsItemHovered() then
+                ImGui.BeginTooltip()
+                ImGui.Text("Enter Spawn Name this is CaseSensative,\n also accepts variables like: ${Target.CleanName} and ${Target.Name}")
+                ImGui.EndTooltip()
+            end
             ImGui.SameLine()
             -- Button to add the new spawn
             if ImGui.Button("Add Spawn") then
@@ -481,7 +478,6 @@ local function DrawSearchWindow()
                     isInAlerts = isSpawnInAlerts(spawnName, spawnAlerts)
                 })
             end
-            
             -- Sort the table so NPCs in alerts come first
             table.sort(sortedNpcs, function(a, b)
                 if a.isInAlerts and not b.isInAlerts then
@@ -500,40 +496,32 @@ local function DrawSearchWindow()
                     ImGui.TableSetupColumn("Zone", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
                     ImGui.TableSetupColumn("Remove")
                     ImGui.TableHeadersRow()
-                    
                     for index, npc in ipairs(sortedNpcs) do
                         local spawnName = npc.name
                         ImGui.TableNextRow()
                         ImGui.TableNextColumn()
-                        
                         -- Modify the spawnName to create a display name
                         local displayName = spawnName:gsub("_", " "):gsub("%d*$", "") -- Replace underscores with spaces and remove trailing digits
-                        
                         -- Check if the spawn is in the alert list and change color
                         if npc.isInAlerts then
                             ImGui.PushStyleColor(ImGuiCol.Text, 0, 1, 0, 1) -- Green color for alert spawns
                         end
-                        
                         -- Display the name and handle interaction
                         ImGui.Text(displayName)
                         if ImGui.IsItemHovered() then
                             ImGui.BeginTooltip()
                             ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
                             ImGui.EndTooltip()
-                            
                             -- Right-click interaction uses the original spawnName
                             if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
                                 CMD('/nav spawn "' .. spawnName .. '"')
                             end
                         end
-                        
                         if npc.isInAlerts then
                             ImGui.PopStyleColor()
                         end
-                        
                         ImGui.TableNextColumn()
                         ImGui.Text(Zone.ShortName())
-                        
                         -- Correctly concatenate 'id' as a string for ImGui identifiers
                         ImGui.TableNextColumn()
                         if ImGui.SmallButton('Remove##' .. tostring(index)) then
@@ -545,14 +533,12 @@ local function DrawSearchWindow()
                             ImGui.EndTooltip()
                         end
                     end
-                    
                     ImGui.EndTable()
                 end
                 else
                 ImGui.Text('No spawns in list for this zone. Add some!')
             end
             ImGui.EndTabItem()
-            
             ImGui.EndTabBar()
         end
         ImGui.End()
@@ -565,7 +551,6 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
             ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
             ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
             ImGui.TableHeadersRow()
-            
             for id, spawnData in pairs(spawnAlerts) do
                 ImGui.TableNextRow()
                 ImGui.TableSetColumnIndex(0)
@@ -579,15 +564,17 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
                     if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
                         CMD('/nav id "' .. spawnData.ID() .. '"')
                     end
-                end              
+                end
                 ImGui.TableSetColumnIndex(1)
-                ImGui.Text("Dist: " .. math.floor(spawnData.Distance() or 0))
+                local distance = math.floor(spawnData.Distance() or 0)
+                ColorDistance(distance)
+                ImGui.Text("Dist: " .. distance)
+                ImGui.PopStyleColor()
             end
             ImGui.EndTable()
         end
     end
 end
-
 function DrawAlertGUI() -- Draw GUI Window
     if AlertWindowOpen then
         if mq.TLO.Me.Zoning() then return end
@@ -603,16 +590,13 @@ function DrawAlertGUI() -- Draw GUI Window
             else
             BuildAlertRows()
         end
-        
         ImGui.End()
     end
 end
 local function DrawSearchGUI()
     RefreshZone()
-    
     DrawSearchWindow()
 end
-
 -- helpers
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
 local GetCharZone = function()
@@ -778,24 +762,20 @@ local load_binds = function()
                     break
                 end
             end
-            
             if found then
                 -- Rebuild the table to eliminate gaps
                 local newTable = {}
                 for _, v in pairs(settings[zone]) do
                     table.insert(newTable, v)
                 end
-                
                 -- Clear the existing table
                 for k in pairs(settings[zone]) do
                     settings[zone][k] = nil
                 end
-                
                 -- Repopulate the table with renumbered spawns
                 for i, v in ipairs(newTable) do
                     settings[zone]['Spawn'..i] = v
                 end
-                
                 save_settings()
                 print_ts('\ayRemoved spawn alert for '..val_str..' in '..zone)
                 else
@@ -927,14 +907,12 @@ local load_binds = function()
             print_ts('\t\ay/am spawns on|off\a-t -- toggle spawn alerts')
             print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
             print_ts('\t\ay/am doalert \a-t -- toggle Popup alerts')
-            
             print_ts('\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
             print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
             print_ts('\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
             print_ts('\t\ay/am delay #\a-t -- configure alert check delay (seconds)')
             print_ts('\t\ay/am remind #\a-t -- configure alert reminder interval (seconds)')
             print_ts('\t\ay/am popup\a-t -- Toggles Display of Alert Window')
-            
             print_ts('\a-y- Ignore List -')
             print_ts('\t\ay/am ignoreadd pc\a-t -- add pc to the ignore list')
             print_ts('\t\ay/am ignoredel pc\a-t -- delete pc from the ignore list')
@@ -944,7 +922,6 @@ local load_binds = function()
             print_ts('\t\ay/am spawndel npc\a-t -- delete monster from the list of tracked spawns')
             print_ts('\t\ay/am spawnlist\a-t -- display monsters being tracked for the current zone')
             print_ts('\t\ay/am show\a-t -- Toggles display of Search Window and Spawns for the current zone')
-            
             print_ts('\a-y- Commands - executed when players remain in the alert radius for the reminder interval')
             print_ts('\t\ay/am cmdadd command\a-t -- add command to run when someone enters your alert radius')
             print_ts('\t\ay/am cmddel command\a-t -- delete command to run when someone enters your alert radius')
