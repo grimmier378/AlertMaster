@@ -392,6 +392,7 @@ local function DrawSearchWindow()
             ImGui.Text("Toggle Beep Alerts On\\Off")
             ImGui.EndTooltip()
         end
+        ImGui.SameLine()
         -- Alert Window Toggle Button
         if AlertWindowOpen then
             ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 1.0) -- Green for active state
