@@ -296,7 +296,6 @@ local function RefreshZone()
     GUI_Main.Refresh.Sort.Mobs = true
     GUI_Main.Refresh.Table.Mobs = false
 end
-
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
     if ImGui.SmallButton(Icons.FA_USER_PLUS) then CMD('/am spawnadd "'..entry.MobName..'"') end
@@ -336,6 +335,7 @@ local function DrawSearchWindow()
         GUI_Main.Flags = bit32.band(GUI_Main.Flags, bit32.bnot(ImGuiWindowFlags.NoMove), bit32.bnot(ImGuiWindowFlags.NoResize))
     end
     if SearchWindowOpen then
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
         if mq.TLO.Me.Zoning() then return end
         SearchWindowOpen = ImGui.Begin("Alert Master Search Window", SearchWindowOpen, GUI_Main.Flags)
         --   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
@@ -480,7 +480,6 @@ local function DrawSearchWindow()
                 clipper:End()
                 ImGui.EndTable()
             end
-            
             elseif currentTab == "npcList" then
             -- Tab for NPC List
             local npcs = settings[Zone.ShortName()] or {}
@@ -577,6 +576,7 @@ local function DrawSearchWindow()
                 ImGui.Text('No spawns in list for this zone. Add some!')
             end
         end
+        ImGui.PopStyleVar(1)
         ImGui.End()
     end
 end
@@ -613,6 +613,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 end
 function DrawAlertGUI() -- Draw GUI Window
     if AlertWindowOpen then
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
         if mq.TLO.Me.Zoning() then return end
         AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
         if not opened then
@@ -626,6 +627,7 @@ function DrawAlertGUI() -- Draw GUI Window
             else
             BuildAlertRows()
         end
+        ImGui.PopStyleVar(1)
         ImGui.End()
     end
 end
