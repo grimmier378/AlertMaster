@@ -29,6 +29,7 @@ require('lib/ed/utils')
 local mq = require('mq')
 --- @type ImGui
 require('ImGui')
+Icons = require('mq.ICONS')
 -- Variables
 local arg = {...}
 local CMD = mq.cmd
@@ -52,6 +53,9 @@ local AlertWindow_Show = false
 local AlertWindowOpen = false
 local SearchWindow_Show = false
 local SearchWindowOpen = false
+local window = {
+    Locked = false, -- Initially allow moving the window
+}
 local Table_Cache = {
     Rules = {},
     Unhandled = {},
@@ -72,6 +76,7 @@ local spawnListFlags = bit32.bor(
 local GUI_Main = {
     Open  = false,
     Show  = false,
+    Locked = false, 
     Flags = bit32.bor(
         ImGuiWindowFlags.None
     ),
@@ -108,7 +113,7 @@ local GUI_Main = {
             ImGuiTableFlags.RowBg,
             --ImGuiTableFlags.NoKeepColumnsVisible,
             ImGuiTableFlags.SizingFixedFit,
-            ImGuiTableFlags.MultiSortable,
+            -- ImGuiTableFlags.MultiSortable, -- MultiSort seems to not work at all.
             ImGuiTableFlags.BordersV,
             ImGuiTableFlags.BordersOuter,
             ImGuiTableFlags.Reorderable,
@@ -124,6 +129,11 @@ local GUI_Main = {
         },
     },
 }
+-- Function to toggle window lock state
+local function ToggleWindowLock()
+    GUI_Main.Locked = not GUI_Main.Locked -- Toggle the state
+end
+
 function isSpawnInAlerts(spawnName, spawnAlerts)
     for _, spawnData in pairs(spawnAlerts) do
         if spawnData.CleanName() == spawnName or spawnData.Name() == spawnName then
@@ -253,34 +263,38 @@ local function RefreshZone()
 end
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
-    if ImGui.SmallButton("NavTo##" .. entry.ID) then
+    if ImGui.SmallButton("Nav##" .. entry.ID) then
         CMD('/nav id '..entry.MobID)
         printf('\ayMoving to \ag%s',entry.MobName)
     end
-    ImGui.TableNextColumn()
-    ImGui.Text('%s', entry.MobName)
-
-    ImGui.TableNextColumn()
-    ImGui.Text('%s', (entry.MobLvl))
-
-    ImGui.TableNextColumn()
-    ImGui.Text('%s', (entry.MobDist))
-
-    ImGui.TableNextColumn()
-    ImGui.Text('%s', (entry.MobID))
-
-    ImGui.TableNextColumn()
-    ImGui.Text('%s', (entry.MobLoc))
-
-    ImGui.TableNextColumn()
     ImGui.SameLine()
     if ImGui.SmallButton("Add##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
-    ImGui.SameLine()
-    if ImGui.SmallButton("Del##" .. entry.ID) then CMD('/am spawndel "'..entry.MobName..'"') end
+    ImGui.TableNextColumn()
+    ImGui.Text('%s', entry.MobName)
+    
+    ImGui.TableNextColumn()
+    ImGui.Text('%s', (entry.MobLvl))
+    
+    ImGui.TableNextColumn()
+    ImGui.Text('%s', (entry.MobDist))
+    
+    ImGui.TableNextColumn()
+    ImGui.Text('%s', (entry.MobID))
+    
+    ImGui.TableNextColumn()
+    ImGui.Text('%s', (entry.MobLoc))
+    ImGui.TableNextColumn()
+    
 end
 
 local function DrawSearchWindow()
+    if GUI_Main.Locked then
+        GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
+        else
+        GUI_Main.Flags = bit32.band(GUI_Main.Flags, bit32.bnot(ImGuiWindowFlags.NoMove), bit32.bnot(ImGuiWindowFlags.NoResize))
+    end
     if SearchWindowOpen then
+        
         if mq.TLO.Me.Zoning() then return end
         SearchWindowOpen = ImGui.Begin("Alert Master Search Window", SearchWindowOpen, GUI_Main.Flags)
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
@@ -291,7 +305,19 @@ local function DrawSearchWindow()
         end
         if #Table_Cache.Unhandled > 0 then ImGui.PopStyleColor(3) end
         ImGui.SameLine()
-        if ImGui.SmallButton("Refresh Zone") then RefreshZone() end
+        -- if ImGui.Button(GUI_Main.Locked and "Unlock Window" or "Lock Window") then
+        --     ToggleWindowLock()
+        -- end 
+        -- if ImGui.SmallButton("Refresh Zone") then RefreshZone() end
+        
+        local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
+        Icons.FA_UNLOCK .. '##lockTablButton'
+        if ImGui.Button(lockedIcon) then
+            --ImGuiWindowFlags.NoMove
+            GUI_Main.Locked = not GUI_Main.Locked
+        end
+        
+        
         ImGui.SameLine()
         -- Alert Window Toggle Button
         if AlertWindowOpen then
@@ -353,15 +379,14 @@ local function DrawSearchWindow()
                     GUI_Main.Refresh.Table.Unhandled = true
                 end
                 ImGui.Separator()
-                if ImGui.BeginTable('##RulesTable', 7, GUI_Main.Table.Flags) then
+                if ImGui.BeginTable('##RulesTable', 6, GUI_Main.Table.Flags) then
                     ImGui.TableSetupScrollFreeze(0, 1)
-                    ImGui.TableSetupColumn("NavTO", ImGuiTableColumnFlags.NoSort, 2, GUI_Main.Table.Column_ID.Remove)
+                    ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.NoSort, 2, GUI_Main.Table.Column_ID.Remove)
                     ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobName, 150)
                     ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobLvl)
                     ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobDist)
                     ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 8, GUI_Main.Table.Column_ID.MobID)
                     ImGui.TableSetupColumn("Loc (x,y,z)", ImGuiTableColumnFlags.NoSort, 8, GUI_Main.Table.Column_ID.MobLoc)
-                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.NoSort, 8, GUI_Main.Table.Column_ID.Action)
                     ImGui.TableHeadersRow()
                     local sortSpecs = ImGui.TableGetSortSpecs()
                     if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
@@ -392,10 +417,10 @@ local function DrawSearchWindow()
             if next(spawnAlerts) ~= nil then
                 
                 -- Change tab background color to something noticeable
-                ImGui.PushStyleColor(ImGuiCol.Tab, 1.0, 0.3, 0.3, 1.0) -- Reddish background for alert
-                ImGui.PushStyleColor(ImGuiCol.TabHovered, 1.0, 0.4, 0.4, 1.0) -- Lighter red when hovered
+                ImGui.PushStyleColor(ImGuiCol.Tab, 1.0, 0.3, 0.3, 1.0)
+                ImGui.PushStyleColor(ImGuiCol.TabHovered, 1.0, 0.4, 0.4, 1.0)
                 ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
-                ImGui.PushStyleColor(ImGuiCol.TabActive, 1.0, 0.5, 0.5, 1.0) -- Even lighter red when active or selected
+                ImGui.PushStyleColor(ImGuiCol.TabActive, 0.4, 1.0, 0.4, 1.0)
                 ImGui.BeginTabItem("NPC List")
                 ImGui.PopStyleColor(4)
                 else
@@ -547,6 +572,7 @@ function DrawAlertGUI() -- Draw GUI Window
 end
 local function DrawSearchGUI()
     RefreshZone()
+    
     DrawSearchWindow()
 end
 
