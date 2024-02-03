@@ -43,7 +43,7 @@ local Zone = TLO.Zone
 local curZone = Zone.Name()
 local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
-local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false}
+local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200}
 local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
@@ -52,8 +52,10 @@ local AlertWindow_Show = false
 local AlertWindowOpen = false
 local SearchWindow_Show = false
 local SearchWindowOpen = false
-local window = {
-    Locked = false, -- Initially allow moving the window
+---@class
+local DistColorRanges = {
+    orange = 600, -- distance the color changes from green to orange
+    red = 1200, -- distance the color changes from orange to red
 }
 local Table_Cache = {
     Rules = {},
@@ -128,9 +130,41 @@ local GUI_Main = {
         },
     },
 }
--- Function to toggle window lock state
-local function ToggleWindowLock()
-    GUI_Main.Locked = not GUI_Main.Locked -- Toggle the state
+-- helpers
+local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
+local GetCharZone = function()
+    return '\aw[\ao'..Me.CleanName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
+end
+local print_ts = function(msg) print(MsgPrefix()..msg) end
+local function print_status()
+    print_ts('\ayAlert Status: '..tostring(active and 'on' or 'off'))
+    print_ts('\a-tPCs: \a-y'..tostring(pcs)..'\ax radius: \a-y'..tostring(radius)..'\ax zradius: \a-y'..tostring(zradius)..'\ax delay: \a-y'..tostring(delay)..'s\ax remind: \a-y'..tostring(remind)..' min\ax')
+    print_ts('\agClose Range\a-t Below: \a-g'..tostring(DistColorRanges.orange)..'\ax')
+    print_ts('\aoMid Range\a-t Between: \a-g'..tostring(DistColorRanges.orange)..'\a-t and \a-r'..tostring(DistColorRanges.red)..'\ax')
+    print_ts('\arLong Rage\a-t Greater than: \a-r'..tostring(DistColorRanges.red)..'\ax')
+    print_ts('\a-tAnnounce PCs: \a-y'..tostring(announce)..'\ax')
+    print_ts('\a-tSpawns (zone wide): \a-y'..tostring(spawns)..'\ax')
+    print_ts('\a-tGMs (zone wide): \a-y'..tostring(gms)..'\ax')
+    print_ts('\a-tPopup Alerts: \a-y'..tostring(doAlert)..'\ax')
+    print_ts('\a-tBeep: \a-y'..tostring(doBeep)..'\ax')
+end
+local save_settings = function()
+    LIP.save(settings_path, settings)
+end
+local check_safe_zone = function()
+    return tSafeZones[Zone.ShortName():lower()]
+end
+local function ColorDistance(distance)
+    if distance < DistColorRanges.orange then
+        -- Green color for Close Range
+        ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 1.0, 0.0, 1.0) -- RGBA
+        elseif distance >= DistColorRanges.orange and distance <= DistColorRanges.red then
+        -- Orange color for Mid Range
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.76, 0.03, 1.0) -- RGBA
+        else
+        -- Red color for Far Distance
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 0.0, 1.0) -- RGBA
+    end
 end
 function isSpawnInAlerts(spawnName, spawnAlerts)
     for _, spawnData in pairs(spawnAlerts) do
@@ -259,18 +293,7 @@ local function RefreshZone()
     GUI_Main.Refresh.Sort.Mobs = true
     GUI_Main.Refresh.Table.Mobs = false
 end
-local function ColorDistance(distance)
-    if distance < 600 then
-        -- Green color for distance < 600
-        ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 1.0, 0.0, 1.0) -- RGBA
-        elseif distance >= 600 and distance <= 1100 then
-        -- Yellowish orange for distance between 600 and 1100
-        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.76, 0.03, 1.0) -- RGBA
-        else
-        -- Red color for distance > 1100
-        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 0.0, 1.0) -- RGBA
-    end
-end
+
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
     if ImGui.SmallButton("Add##" .. entry.ID) then CMD('/am spawnadd "'..entry.MobName..'"') end
@@ -293,7 +316,7 @@ local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
     ImGui.Text('%s', (entry.MobLvl))
     ImGui.TableNextColumn()
-    local distance = entry.MobDist
+    local distance = math.floor(entry.MobDist or 0)
     ColorDistance(distance)
     ImGui.Text(distance)
     ImGui.PopStyleColor()
@@ -325,6 +348,8 @@ local function DrawSearchWindow()
         if ImGui.Button(lockedIcon) then
             --ImGuiWindowFlags.NoMove
             GUI_Main.Locked = not GUI_Main.Locked
+            settings[CharConfig]['locked'] = GUI_Main.Locked
+            save_settings()
         end
         if ImGui.IsItemHovered() then
             ImGui.BeginTooltip()
@@ -568,7 +593,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
                 ImGui.TableSetColumnIndex(1)
                 local distance = math.floor(spawnData.Distance() or 0)
                 ColorDistance(distance)
-                ImGui.Text("Dist: " .. distance)
+                ImGui.Text(distance)
                 ImGui.PopStyleColor()
             end
             ImGui.EndTable()
@@ -596,27 +621,6 @@ end
 local function DrawSearchGUI()
     RefreshZone()
     DrawSearchWindow()
-end
--- helpers
-local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
-local GetCharZone = function()
-    return '\aw[\ao'..Me.CleanName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
-end
-local print_ts = function(msg) print(MsgPrefix()..msg) end
-local function print_status()
-    print_ts('\ayAlert Status: '..tostring(active and 'on' or 'off'))
-    print_ts('\a-tPCs: \a-y'..tostring(pcs)..'\ax radius: \a-y'..tostring(radius)..'\ax zradius: \a-y'..tostring(zradius)..'\ax delay: \a-y'..tostring(delay)..'s\ax remind: \a-y'..tostring(remind)..' min\ax')
-    print_ts('\a-tAnnounce PCs: \a-y'..tostring(announce)..'\ax')
-    print_ts('\a-tSpawns (zone wide): \a-y'..tostring(spawns)..'\ax')
-    print_ts('\a-tGMs (zone wide): \a-y'..tostring(gms)..'\ax')
-    print_ts('\a-tPopup Alerts: \a-y'..tostring(doAlert)..'\ax')
-    print_ts('\a-tBeep: \a-y'..tostring(doBeep)..'\ax')
-end
-local save_settings = function()
-    LIP.save(settings_path, settings)
-end
-local check_safe_zone = function()
-    return tSafeZones[Zone.ShortName():lower()]
 end
 local load_binds = function()
     local bind_alertmaster = function(cmd, val)
@@ -705,6 +709,20 @@ local load_binds = function()
             delay = val_num
             save_settings()
             print_ts('\ayDelay interval = '..delay)
+        end
+        -- distfar Color Distance
+        if cmd == 'distfar' and val_num > 0 then
+            settings[CharConfig]['distfar'] = val_num
+            DistColorRanges.red = val_num
+            save_settings()
+            print_ts('\arFar Range\a-t Greater than:\a-r'..DistColorRanges.red..'\ax')
+        end
+        -- distmid Color Distance
+        if cmd == 'distmid' and val_num > 0 then
+            settings[CharConfig]['distmid'] = val_num
+            DistColorRanges.orange = val_num
+            save_settings()
+            print_ts('\aoMid Range\a-t Between: \a-g'..DistColorRanges.orange..' \a-tand \a-r'..DistColorRanges.red..'\ax')
         end
         -- remind
         if cmd == 'remind' and  val_num >= 0 then
@@ -913,6 +931,8 @@ local load_binds = function()
             print_ts('\t\ay/am delay #\a-t -- configure alert check delay (seconds)')
             print_ts('\t\ay/am remind #\a-t -- configure alert reminder interval (seconds)')
             print_ts('\t\ay/am popup\a-t -- Toggles Display of Alert Window')
+            print_ts('\t\ay/am dismid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
+            print_ts('\t\ay/am distfar\a-t -- Sets the distnace the color changes from \a-oOrange \a-tto \a-rRed')
             print_ts('\a-y- Ignore List -')
             print_ts('\t\ay/am ignoreadd pc\a-t -- add pc to the ignore list')
             print_ts('\t\ay/am ignoredel pc\a-t -- delete pc from the ignore list')
@@ -960,12 +980,27 @@ local load_settings = function()
         settings[CharConfig]['beep'] = false
         save_settings()
     end
-    doBeep = settings[CharConfig]['beep']
     if settings[CharConfig]['popup'] == nil then
         settings[CharConfig]['popup'] = false
         save_settings()
     end
+    if settings[CharConfig]['distmid'] == nil then
+        settings[CharConfig]['distmid'] = 600
+        save_settings()
+    end
+    if settings[CharConfig]['distfar'] == nil then
+        settings[CharConfig]['distfar'] = 1200
+        save_settings()
+    end
+    if settings[CharConfig]['locked'] == nil then
+        settings[CharConfig]['locked'] = false
+        save_settings()
+    end
+    doBeep = settings[CharConfig]['beep']
+    GUI_Main.Locked = settings[CharConfig]['locked']
     doAlert = settings[CharConfig]['popup']
+    DistColorRanges.orange = settings[CharConfig]['distmid']
+    DistColorRanges.red = settings[CharConfig]['distfar']
     -- setup safe zone "set"
     for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
