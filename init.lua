@@ -1136,14 +1136,19 @@ local check_for_spawns = function()
                 AlertWindowOpen = false
             end
             -- Check if there are any entries in the spawnAlerts table
-            if next(spawnAlerts) ~= nil and spawnAlertsUpdated then
-                if doAlert then
-                    AlertWindow_Show = true
-                    AlertWindowOpen = true
-                    if not AlertWindowOpen then DrawAlertGUI() end
+            if next(spawnAlerts) ~= nil then
+                if spawnAlertsUpdated then
+                    if doAlert then
+                        AlertWindow_Show = true
+                        AlertWindowOpen = true
+                        if not AlertWindowOpen then DrawAlertGUI() end
+                    end
+                    alertTime = os.time()
+                    if doBeep then CMD('/beep') end
                 end
-                alertTime = os.time()
-                if doBeep then CMD('/beep') end
+                else
+                AlertWindow_Show = false
+                AlertWindowOpen = false
             end
         end
     end
