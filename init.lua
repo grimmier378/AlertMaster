@@ -101,14 +101,16 @@ local GUI_Main = {
         Column_ID = {
             ID          = 1,
             MobName     = 2,
-            MobLoc      = 3,
-            MobZoneName = 4,
-            MobDist     = 5,
-            MobID       = 6,
-            Action      = 7,
-            Remove      = 8,
-            MobLvl      = 9,
-            MobConColor = 10,
+            MobDirtyName = 3,
+            MobLoc      = 4,
+            MobZoneName = 5,
+            MobDist     = 6,
+            MobID       = 7,
+            Action      = 8,
+            Remove      = 9,
+            MobLvl      = 10,
+            MobConColor = 11,
+            Enum_Action = 12
         },
         Flags = bit32.bor(
             ImGuiTableFlags.Resizable,
@@ -182,7 +184,8 @@ local function SpawnToEntry(spawn, row)
         local entry = {
             ID = row,
             MobName = spawn.CleanName(),
-            MobZoneName = mq.TLO.Zone.Name,
+            MobDirtyName = spawn.Name(),
+            MobZoneName = mq.TLO.Zone.Name(),
             MobDist = math.floor(spawn.Distance() or 0),
             MobLoc = spawn.Loc(),
             MobID = spawn.ID(),
@@ -277,6 +280,7 @@ local function RefreshUnhandled()
         local found = 0
         for _,search in ipairs(splitSearch) do
             if string.find(string.lower(v.MobName), string.lower(search)) then found = found + 1 end
+            if string.find(v.MobDirtyName, search) then found = found + 1 end
         end
         if #splitSearch == found then table.insert(newTable, v) end
     end
@@ -388,7 +392,7 @@ local function DrawSearchWindow()
         end
         if ImGui.IsItemHovered() and showTooltips then
             ImGui.BeginTooltip()
-            ImGui.Text("Open\\Close Alert Popup Window")
+            ImGui.Text("Toggle Popup Alerts On\\Off")
             ImGui.EndTooltip()
         end
         ImGui.SameLine()
@@ -420,7 +424,7 @@ local function DrawSearchWindow()
         end
         if ImGui.IsItemHovered() and showTooltips then
             ImGui.BeginTooltip()
-            ImGui.Text("Toggle Popup Alerts On\\Off")
+            ImGui.Text("Show\\Hide Alert Window")
             ImGui.EndTooltip()
         end
         ImGui.SameLine()
