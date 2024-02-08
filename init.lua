@@ -30,6 +30,7 @@ local mq = require('mq')
 --- @type ImGui
 require('ImGui')
 Icons = require('mq.ICONS')
+local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
 local amVer = '1.4.9'
@@ -41,7 +42,6 @@ local NearestSpawn = TLO.NearestSpawn
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
-local curZone = Zone.Name()
 local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
 local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
@@ -49,10 +49,7 @@ local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
 -- [[ UI ]] --
-local AlertWindow_Show = false
-local AlertWindowOpen = false
-local SearchWindow_Show = false
-local SearchWindowOpen = false
+local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
 local newSpawnName = ''
 ---@class
@@ -111,6 +108,7 @@ local GUI_Main = {
             Action      = 7,
             Remove      = 8,
             MobLvl      = 9,
+            MobConColor = 10,
         },
         Flags = bit32.bor(
             ImGuiTableFlags.Resizable,
@@ -180,6 +178,7 @@ function isSpawnInAlerts(spawnName, spawnAlerts)
 end
 local function SpawnToEntry(spawn, row)
     if spawn.Distance() then
+        
         local entry = {
             ID = row,
             MobName = spawn.CleanName(),
@@ -188,6 +187,7 @@ local function SpawnToEntry(spawn, row)
             MobLoc = spawn.Loc(),
             MobID = spawn.ID(),
             MobLvl = spawn.Level(),
+            MobConColor = string.lower(spawn.ConColor() or 'white'),
             Enum_Action = 'unhandled',
         }
         return entry
@@ -299,6 +299,7 @@ local function RefreshZone()
 end
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
+    -- Add to Spawn List Button
     if ImGui.SmallButton(Icons.FA_USER_PLUS) then CMD('/am spawnadd "'..entry.MobName..'"') end
     if ImGui.IsItemHovered() then
         ImGui.BeginTooltip()
@@ -306,6 +307,7 @@ local function DrawRuleRow(entry)
         ImGui.EndTooltip()
     end
     ImGui.TableNextColumn()
+    -- Mob Name
     ImGui.Text('%s', entry.MobName)
     if ImGui.IsItemHovered() then
         ImGui.BeginTooltip()
@@ -316,20 +318,28 @@ local function DrawRuleRow(entry)
             CMD('/nav id "' .. entry.MobID .. '"')
         end
     end
+    ImGui.SameLine()
+
     ImGui.TableNextColumn()
+    --Consider Color for Level Text
+    COLOR.txtColor(entry.MobConColor)
     ImGui.Text('%s', (entry.MobLvl))
+    ImGui.PopStyleColor()
     ImGui.TableNextColumn()
+    --Distance
     local distance = math.floor(entry.MobDist or 0)
     ColorDistance(distance)
     ImGui.Text(distance)
     ImGui.PopStyleColor()
     ImGui.TableNextColumn()
+    --Mob ID
     ImGui.Text('%s', (entry.MobID))
     ImGui.TableNextColumn()
+    --Mob Loc
     ImGui.Text('%s', (entry.MobLoc))
     ImGui.TableNextColumn()
 end
-showTooltips = showTooltips or true
+
 local function DrawSearchWindow()
     if GUI_Main.Locked then
         GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
@@ -667,6 +677,9 @@ function DrawAlertGUI() -- Draw GUI Window
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
         if mq.TLO.Me.Zoning() then return end
         AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
+        if ImGui.IsWindowHovered(ImGuiHoveredFlags.TitleBar) and ImGui.IsMouseClicked(ImGuiMouseButton.Right) then
+            showTooltips = not showTooltips
+        end
         if not opened then
             AlertWindowOpen = false
             AlertWindow_Show = false
