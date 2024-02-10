@@ -30,8 +30,10 @@ local mq = require('mq')
 --- @type ImGui
 require('ImGui')
 Icons = require('mq.ICONS')
+local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
+local amVer = '1.4.9'
 local CMD = mq.cmd
 local TLO = mq.TLO
 local Me = TLO.Me
@@ -40,7 +42,6 @@ local NearestSpawn = TLO.NearestSpawn
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
-local curZone = Zone.Name()
 local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
 local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
@@ -48,10 +49,7 @@ local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
 -- [[ UI ]] --
-local AlertWindow_Show = false
-local AlertWindowOpen = false
-local SearchWindow_Show = false
-local SearchWindowOpen = false
+local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
 local newSpawnName = ''
 ---@class
@@ -103,13 +101,16 @@ local GUI_Main = {
         Column_ID = {
             ID          = 1,
             MobName     = 2,
-            MobLoc      = 3,
-            MobZoneName = 4,
-            MobDist     = 5,
-            MobID       = 6,
-            Action      = 7,
-            Remove      = 8,
-            MobLvl      = 9,
+            MobDirtyName = 3,
+            MobLoc      = 4,
+            MobZoneName = 5,
+            MobDist     = 6,
+            MobID       = 7,
+            Action      = 8,
+            Remove      = 9,
+            MobLvl      = 10,
+            MobConColor = 11,
+            Enum_Action = 12
         },
         Flags = bit32.bor(
             ImGuiTableFlags.Resizable,
@@ -179,14 +180,17 @@ function isSpawnInAlerts(spawnName, spawnAlerts)
 end
 local function SpawnToEntry(spawn, row)
     if spawn.Distance() then
+        
         local entry = {
             ID = row,
             MobName = spawn.CleanName(),
-            MobZoneName = mq.TLO.Zone.Name,
+            MobDirtyName = spawn.Name(),
+            MobZoneName = mq.TLO.Zone.Name(),
             MobDist = math.floor(spawn.Distance() or 0),
             MobLoc = spawn.Loc(),
             MobID = spawn.ID(),
             MobLvl = spawn.Level(),
+            MobConColor = string.lower(spawn.ConColor() or 'white'),
             Enum_Action = 'unhandled',
         }
         return entry
@@ -276,6 +280,7 @@ local function RefreshUnhandled()
         local found = 0
         for _,search in ipairs(splitSearch) do
             if string.find(string.lower(v.MobName), string.lower(search)) then found = found + 1 end
+            if string.find(v.MobDirtyName, search) then found = found + 1 end
         end
         if #splitSearch == found then table.insert(newTable, v) end
     end
@@ -298,6 +303,7 @@ local function RefreshZone()
 end
 local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
+    -- Add to Spawn List Button
     if ImGui.SmallButton(Icons.FA_USER_PLUS) then CMD('/am spawnadd "'..entry.MobName..'"') end
     if ImGui.IsItemHovered() then
         ImGui.BeginTooltip()
@@ -305,6 +311,7 @@ local function DrawRuleRow(entry)
         ImGui.EndTooltip()
     end
     ImGui.TableNextColumn()
+    -- Mob Name
     ImGui.Text('%s', entry.MobName)
     if ImGui.IsItemHovered() then
         ImGui.BeginTooltip()
@@ -315,19 +322,28 @@ local function DrawRuleRow(entry)
             CMD('/nav id "' .. entry.MobID .. '"')
         end
     end
+    ImGui.SameLine()
+
     ImGui.TableNextColumn()
+    --Consider Color for Level Text
+    COLOR.txtColor(entry.MobConColor)
     ImGui.Text('%s', (entry.MobLvl))
+    ImGui.PopStyleColor()
     ImGui.TableNextColumn()
+    --Distance
     local distance = math.floor(entry.MobDist or 0)
     ColorDistance(distance)
     ImGui.Text(distance)
     ImGui.PopStyleColor()
     ImGui.TableNextColumn()
+    --Mob ID
     ImGui.Text('%s', (entry.MobID))
     ImGui.TableNextColumn()
+    --Mob Loc
     ImGui.Text('%s', (entry.MobLoc))
     ImGui.TableNextColumn()
 end
+
 local function DrawSearchWindow()
     if GUI_Main.Locked then
         GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
@@ -337,7 +353,11 @@ local function DrawSearchWindow()
     if SearchWindowOpen then
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
         if mq.TLO.Me.Zoning() then return end
-        SearchWindowOpen = ImGui.Begin("Alert Master Search Window", SearchWindowOpen, GUI_Main.Flags)
+        SearchWindowOpen = ImGui.Begin("Alert Master", SearchWindowOpen, GUI_Main.Flags)
+        -- Check for right-click on the title bar to toggle tooltip visibility
+        if ImGui.IsWindowHovered(ImGuiHoveredFlags.TitleBar) and ImGui.IsMouseClicked(ImGuiMouseButton.Right) then
+            showTooltips = not showTooltips
+        end
         --   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
         if #Table_Cache.Unhandled > 0 then
             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.3, 0.3, 1))
@@ -354,7 +374,7 @@ local function DrawSearchWindow()
             settings[CharConfig]['locked'] = GUI_Main.Locked
             save_settings()
         end
-        if ImGui.IsItemHovered() then
+        if ImGui.IsItemHovered() and showTooltips then
             ImGui.BeginTooltip()
             ImGui.Text("Lock Window")
             ImGui.EndTooltip()
@@ -363,34 +383,30 @@ local function DrawSearchWindow()
         -- Alert Popup Toggle Button
         if doAlert then
             ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
-            --ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_ALARM) then CMD('/am doalert') end
             ImGui.PopStyleColor(1)
             else
             ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
-            -- ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_ALARM_OFF) then CMD('/am doalert') end
             ImGui.PopStyleColor(1)
         end
-        if ImGui.IsItemHovered() then
+        if ImGui.IsItemHovered() and showTooltips then
             ImGui.BeginTooltip()
-            ImGui.Text("Open\\Close Alert Popup Window")
+            ImGui.Text("Toggle Popup Alerts On\\Off")
             ImGui.EndTooltip()
         end
         ImGui.SameLine()
         -- Beep Alert Toggle Button
         if doBeep then
             ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
-            --  ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.FA_BELL_O) then CMD('/am beep') end
             ImGui.PopStyleColor(1)
             else
             ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
-            -- ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.FA_BELL_SLASH_O) then CMD('/am beep') end
             ImGui.PopStyleColor(1)
         end
-        if ImGui.IsItemHovered() then
+        if ImGui.IsItemHovered() and showTooltips then
             ImGui.BeginTooltip()
             ImGui.Text("Toggle Beep Alerts On\\Off")
             ImGui.EndTooltip()
@@ -399,22 +415,73 @@ local function DrawSearchWindow()
         -- Alert Window Toggle Button
         if AlertWindowOpen then
             ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
-            --    ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_VISIBILITY) then CMD('/am popup') end
             ImGui.PopStyleColor(1)
             else
             ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for inactive state
-            --   ImGui.PushStyleColor(ImGuiCol.Text, 0,0,0,1)
             if ImGui.Button(Icons.MD_VISIBILITY_OFF) then CMD('/am popup') end
             ImGui.PopStyleColor(1)
         end
-        if ImGui.IsItemHovered() then
+        if ImGui.IsItemHovered() and showTooltips then
             ImGui.BeginTooltip()
-            ImGui.Text("Toggle Popup Alerts On\\Off")
+            ImGui.Text("Show\\Hide Alert Window")
             ImGui.EndTooltip()
         end
+        ImGui.SameLine()
+        -- Button to add the new spawn
+        if ImGui.Button(Icons.FA_HASHTAG) then
+            CMD('/am spawnadd ${Target}')
+            npcs = settings[Zone.ShortName()] or {}
+        end
+        if ImGui.IsItemHovered() and showTooltips then
+            ImGui.BeginTooltip()
+            ImGui.Text("Add Target #Dirty_Name0 to SpawnList")
+            ImGui.EndTooltip()
+        end
+        ImGui.SameLine()
+        -- Button to add the new spawn
+        if ImGui.Button(Icons.FA_BULLSEYE) then
+            CMD('/am spawnadd "${Target.CleanName}"')
+            npcs = settings[Zone.ShortName()] or {}
+        end
+        if ImGui.IsItemHovered() and showTooltips then
+            ImGui.BeginTooltip()
+            ImGui.Text("Add Target Clean Name to SpawnList\nThis is handy if you are hunting a specific type of Mob,\ntarget a moss snake and add, you will get all \"a moss snake\"")
+            ImGui.EndTooltip()
+        end
+        ImGui.SameLine(ImGui.GetWindowWidth() - 60)
+        -- Alert Master Scanning Toggle Button
+        if active then
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+            if ImGui.Button(Icons.FA_HEARTBEAT) then CMD('/am off') end
+            ImGui.PopStyleColor(1)
+            else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+            if ImGui.Button(Icons.MD_DO_NOT_DISTURB) then CMD('/am on') end
+            ImGui.PopStyleColor(1)
+        end
+        if ImGui.IsItemHovered() and showTooltips then
+            ImGui.BeginTooltip()
+            ImGui.Text("Toggle ALL Scanning and Alerts On\\Off")
+            ImGui.EndTooltip()
+        end
+        ImGui.SameLine()
+        -- Place a help icon
+        ImGui.SameLine(ImGui.GetWindowWidth() - 30) -- Position at right end of line.
+        if showTooltips then
+            ImGui.Text(Icons.MD_HELP)
+            else
+            ImGui.Text(Icons.MD_HELP_OUTLINE)
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip("Right-click the TitleBar or Main Window.\nTo toggle Tooltips.")
+        end
+        --ImGui.SameLine()
+        ImGui.Separator()
+        -- next row
         if ImGui.Button(Zone.Name()) then
             currentTab = "zone"
+            RefreshZone()
         end
         ImGui.SameLine()
         local tabLabel = "NPC List"
@@ -485,22 +552,20 @@ local function DrawSearchWindow()
             local npcs = settings[Zone.ShortName()] or {}
             local changed
             newSpawnName, changed = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
-            if ImGui.IsItemHovered() then
+            if ImGui.IsItemHovered() and showTooltips then
                 ImGui.BeginTooltip()
                 ImGui.Text("Enter Spawn Name this is CaseSensative,\n also accepts variables like: ${Target.CleanName} and ${Target.Name}")
                 ImGui.EndTooltip()
             end
             ImGui.SameLine()
             -- Button to add the new spawn
-            if ImGui.Button("Add Spawn") and newSpawnName ~= "" then
+            if ImGui.Button(Icons.FA_USER_PLUS) and newSpawnName ~= "" then
                 CMD('/am spawnadd "'..newSpawnName..'"')
                 print(newSpawnName)  -- For debugging
                 newSpawnName = ""  -- Clear the input text after adding
-                -- Refresh npcs from settings in case it was updated
                 npcs = settings[Zone.ShortName()] or {}
             end
-            
-            if ImGui.IsItemHovered() then
+            if ImGui.IsItemHovered() and showTooltips then
                 ImGui.BeginTooltip()
                 ImGui.Text("Add to SpawnList")
                 ImGui.EndTooltip()
@@ -543,7 +608,7 @@ local function DrawSearchWindow()
                         end
                         -- Display the name and handle interaction
                         ImGui.Text(displayName)
-                        if ImGui.IsItemHovered() then
+                        if ImGui.IsItemHovered() and showTooltips then
                             ImGui.BeginTooltip()
                             ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
                             ImGui.EndTooltip()
@@ -564,7 +629,7 @@ local function DrawSearchWindow()
                         if ImGui.SmallButton(buttonLabel) then
                             CMD('/am spawndel "' .. spawnName .. '"')
                         end
-                        if ImGui.IsItemHovered() then
+                        if ImGui.IsItemHovered() and showTooltips then
                             ImGui.BeginTooltip()
                             ImGui.Text("Delete Spawn From SpawnList")
                             ImGui.EndTooltip()
@@ -583,7 +648,7 @@ end
 local function BuildAlertRows() -- Build the Button Rows for the GUI Window
     if zone_id == Zone.ID() then
         -- Start a new table for alerts
-        if ImGui.BeginTable("AlertTable", 2, ImGuiTableFlags_Borders or ImGuiTableFlags_RowBg) then
+        if ImGui.BeginTable("AlertTable", 2,spawnListFlags) then
             ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
             ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
             ImGui.TableHeadersRow()
@@ -593,7 +658,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
                 ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 0.8, 0.0, 0.8)
                 ImGui.Text(spawnData.CleanName())
                 ImGui.PopStyleColor(1)
-                if ImGui.IsItemHovered() then
+                if ImGui.IsItemHovered() and showTooltips then
                     ImGui.BeginTooltip()
                     ImGui.Text("Right-Click to Navigate: "..spawnData.CleanName())
                     ImGui.EndTooltip()
@@ -616,6 +681,9 @@ function DrawAlertGUI() -- Draw GUI Window
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
         if mq.TLO.Me.Zoning() then return end
         AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
+        if ImGui.IsWindowHovered(ImGuiHoveredFlags.TitleBar) and ImGui.IsMouseClicked(ImGuiMouseButton.Right) then
+            showTooltips = not showTooltips
+        end
         if not opened then
             AlertWindowOpen = false
             AlertWindow_Show = false
@@ -1036,7 +1104,7 @@ local setup = function()
     GUI_Main.Refresh.Table.Filtered = true
     GUI_Main.Refresh.Table.Unhandled = true
     mq.imgui.init('DrawSearchWindow', DrawSearchGUI)
-    print_ts('\ayAlert Master (v2024-01-29)\nOriginal by (\a-to_O\ay) Special.Ed (\a-to_O\ay)\n\ayUpdated by (\a-to_O\ay) Grimmier (\a-to_O\ay)')
+    print_ts('\ayAlert Master version:\a-g'..amVer..'\n'..MsgPrefix()..'\ayOriginal by (\a-to_O\ay) Special.Ed (\a-tO_o\ay)\n'..MsgPrefix()..'\ayUpdated by (\a-tO_o\ay) Grimmier (\a-to_O\ay)')
     print_ts('\atLoaded '..settings_file)
     print_ts('\ay/am help for usage')
     print_status()
