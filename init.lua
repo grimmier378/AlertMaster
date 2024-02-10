@@ -44,7 +44,7 @@ local Raid = TLO.Raid
 local Zone = TLO.Zone
 local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
-local defaultConfig =  { delay = 1, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
+local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
 local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
@@ -110,7 +110,8 @@ local GUI_Main = {
             Remove      = 9,
             MobLvl      = 10,
             MobConColor = 11,
-            Enum_Action = 12
+            MobAggro    = 12,
+            Enum_Action = 13
         },
         Flags = bit32.bor(
             ImGuiTableFlags.Resizable,
@@ -142,7 +143,8 @@ end
 local print_ts = function(msg) print(MsgPrefix()..msg) end
 local function print_status()
     print_ts('\ayAlert Status: '..tostring(active and 'on' or 'off'))
-    print_ts('\a-tPCs: \a-y'..tostring(pcs)..'\ax radius: \a-y'..tostring(radius)..'\ax zradius: \a-y'..tostring(zradius)..'\ax delay: \a-y'..tostring(delay)..'s\ax remind: \a-y'..tostring(remind)..' min\ax')
+    print_ts('\a-tPCs: \a-y'..tostring(pcs)..'\ax radius: \a-y'..tostring(radius)..'\ax zradius: \a-y'..tostring(zradius)..'\ax delay: \a-y'..tostring(delay)..'s\ax remind: \a-y'..tostring(remind)..' seconds\ax')
+    print_ts('\a-tremindNPC: \a-y'..tostring(remindNPC)..'\at minutes\ax')
     print_ts('\agClose Range\a-t Below: \a-g'..tostring(DistColorRanges.orange)..'\ax')
     print_ts('\aoMid Range\a-t Between: \a-g'..tostring(DistColorRanges.orange)..'\a-t and \a-r'..tostring(DistColorRanges.red)..'\ax')
     print_ts('\arLong Rage\a-t Greater than: \a-r'..tostring(DistColorRanges.red)..'\ax')
@@ -179,8 +181,17 @@ function isSpawnInAlerts(spawnName, spawnAlerts)
     return false
 end
 local function SpawnToEntry(spawn, row)
+    local pAggro = 0
+    
     if spawn.Distance() then
-        
+        for i = 1, 20 do
+			if mq.TLO.Me.XTarget(i)() ~= 0 then
+                if spawn.ID() == mq.TLO.Me.XTarget(i).ID() then
+                    spawn = mq.TLO.Me.XTarget(i)
+                    pAggro = spawn.PctAggro()
+                end
+            end
+        end
         local entry = {
             ID = row,
             MobName = spawn.CleanName(),
@@ -191,6 +202,7 @@ local function SpawnToEntry(spawn, row)
             MobID = spawn.ID(),
             MobLvl = spawn.Level(),
             MobConColor = string.lower(spawn.ConColor() or 'white'),
+            MobAggro = pAggro,
             Enum_Action = 'unhandled',
         }
         return entry
@@ -248,6 +260,16 @@ local function TableSortSpecs(a, b)
                 if a.MobDist < b.MobDist then
                     delta = -1
                     elseif a.MobDist > b.MobDist then
+                    delta = 1
+                end
+                else
+                return  0
+            end
+            elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobAggro then
+            if a.MobAggro and b.MobAggro then
+                if a.MobAggro < b.MobAggro then
+                    delta = -1
+                    elseif a.MobAggro > b.MobAggro then
                     delta = 1
                 end
                 else
@@ -335,6 +357,16 @@ local function DrawRuleRow(entry)
     ColorDistance(distance)
     ImGui.Text(distance)
     ImGui.PopStyleColor()
+    ImGui.TableNextColumn()
+    --Mob Aggro
+    if entry.MobAggro ~= 0 then
+        local pctAggro = tonumber(entry.MobAggro)/100
+        COLOR.barColor('red')
+        ImGui.ProgressBar(pctAggro, ImGui.GetColumnWidth(), 15)
+        ImGui.PopStyleColor()
+    else
+    
+    end
     ImGui.TableNextColumn()
     --Mob ID
     ImGui.Text('%s', (entry.MobID))
@@ -514,12 +546,13 @@ local function DrawSearchWindow()
                 GUI_Main.Refresh.Table.Unhandled = true
             end
             ImGui.Separator()
-            if ImGui.BeginTable('##RulesTable', 6, GUI_Main.Table.Flags) then
+            if ImGui.BeginTable('##RulesTable', 7, GUI_Main.Table.Flags) then
                 ImGui.TableSetupScrollFreeze(0, 1)
                 ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
                 ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName)
                 ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobLvl)
                 ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, GUI_Main.Table.Column_ID.MobDist)
+                ImGui.TableSetupColumn("Aggro", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobAggro)
                 ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobID)
                 ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, GUI_Main.Table.Column_ID.MobLoc)
                 ImGui.TableHeadersRow()
@@ -687,7 +720,7 @@ function DrawAlertGUI() -- Draw GUI Window
         if not opened then
             AlertWindowOpen = false
             AlertWindow_Show = false
-            if remind > 0 then
+            if remindNPC > 0 then
                 alertTime = os.time()
                 else
                 spawnAlerts = {}
@@ -811,6 +844,12 @@ local load_binds = function()
             remind =  val_num
             save_settings()
             print_ts('\ayRemind interval = '..remind)
+        end
+        if cmd == 'remindnpc' and  val_num >= 0 then
+            settings[CharConfig]['remindNPC'] =  val_num
+            remindNPC =  val_num
+            save_settings()
+            print_ts('\ayRemind NPC interval = '..remindNPC..'minutes')
         end
         -- enabling/disabling spawn alerts
         if cmd == 'spawns' and val_str == 'on' then
@@ -1010,7 +1049,8 @@ local load_binds = function()
             print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
             print_ts('\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
             print_ts('\t\ay/am delay #\a-t -- configure alert check delay (seconds)')
-            print_ts('\t\ay/am remind #\a-t -- configure alert reminder interval (seconds)')
+            print_ts('\t\ay/am remind #\a-t -- configure Player and GM alert reminder interval (seconds)')
+            print_ts('\t\ay/am remindnpc #\a-t -- configure NPC alert reminder interval (Minutes)')
             print_ts('\t\ay/am popup\a-t -- Toggles Display of Alert Window')
             print_ts('\t\ay/am dismid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
             print_ts('\t\ay/am distfar\a-t -- Sets the distnace the color changes from \a-oOrange \a-tto \a-rRed')
@@ -1061,6 +1101,10 @@ local load_settings = function()
         settings[CharConfig]['beep'] = false
         save_settings()
     end
+    if settings[CharConfig]['remindNPC'] == nil then
+        settings[CharConfig]['remindNPC'] = 5
+        save_settings()
+    end
     if settings[CharConfig]['popup'] == nil then
         settings[CharConfig]['popup'] = false
         save_settings()
@@ -1077,6 +1121,7 @@ local load_settings = function()
         settings[CharConfig]['locked'] = false
         save_settings()
     end
+    remindNPC = settings[CharConfig]['remindNPC']
     doBeep = settings[CharConfig]['beep']
     GUI_Main.Locked = settings[CharConfig]['locked']
     doAlert = settings[CharConfig]['popup']
@@ -1319,7 +1364,7 @@ local loop = function()
         if Me.Zoning() then numAlerts = 0 end
         --CMD('/echo '..numAlerts)
         if check_safe_zone() ~= true then
-            if ((os.time() - alertTime) > (remind * 60) and AlertWindow_Show == false and numAlerts >0) then
+            if ((os.time() - alertTime) > (remindNPC * 60) and AlertWindow_Show == false and numAlerts >0) then
                 if doAlert then
                     AlertWindow_Show = true
                     AlertWindowOpen = true
