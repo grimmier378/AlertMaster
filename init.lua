@@ -33,7 +33,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '1.5'
+local amVer = '1.6'
 local CMD = mq.cmd
 local TLO = mq.TLO
 local Me = TLO.Me
@@ -62,6 +62,7 @@ local Table_Cache = {
     Unhandled = {},
     Mobs = {},
 }
+local xTarTable = {}
 local alertFlags = bit32.bor(ImGuiWindowFlags.NoCollapse)
 local spawnListFlags = bit32.bor(
     ImGuiTableFlags.Resizable,
@@ -180,20 +181,14 @@ function isSpawnInAlerts(spawnName, spawnAlerts)
     end
     return false
 end
-local function SpawnToEntry(spawn, row)
+local function SpawnToEntry(spawn, id, table)
     local pAggro = 0
-    
-    if spawn.Distance() then
-        for i = 1, 20 do
-			if mq.TLO.Me.XTarget(i)() ~= 0 then
-                if spawn.ID() == mq.TLO.Me.XTarget(i).ID() then
-                    spawn = mq.TLO.Me.XTarget(i)
-                    pAggro = spawn.PctAggro()
-                end
-            end
-        end
+    if table == xTarTable then
+        pAggro = tonumber(spawn.PctAggro() or 0)
+    end
+    if spawn.ID() then
         local entry = {
-            ID = row,
+            ID = id or 0,
             MobName = spawn.CleanName(),
             MobDirtyName = spawn.Name(),
             MobZoneName = mq.TLO.Zone.Name(),
@@ -210,9 +205,9 @@ local function SpawnToEntry(spawn, row)
         return
     end
 end
-local function InsertTableSpawn(dataTable, spawn, row, opts)
+local function InsertTableSpawn(dataTable, spawn, id, opts)
     if spawn then
-        local entry = SpawnToEntry(spawn, row)
+        local entry = SpawnToEntry(spawn, id, dataTable)
         if opts then
             for k,v in pairs(opts) do
                 entry[k] = v
@@ -312,11 +307,28 @@ local function RefreshUnhandled()
 end
 local function RefreshZone()
     local newTable = {}
+    xTarTable = {}
     local npcs = mq.getFilteredSpawns(function(spawn) return spawn.Type() == 'NPC' end)
-    --CMD('/echo Refreshing Zone Mobs')
     for i = 1, #npcs do
         local spawn = npcs[i]
-        if #npcs>0 then InsertTableSpawn(newTable, spawn, i) end
+        if #npcs>0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
+    end
+    for i = 1, 20 do
+        if mq.TLO.Me.XTarget(i)()~=nil and mq.TLO.Me.XTarget(i)() ~= 0 then
+            local spawn = mq.TLO.Me.XTarget(i)
+            if spawn.ID()>0 then InsertTableSpawn(xTarTable, spawn, tonumber(spawn.ID())) end
+        end
+    end
+    for _, xTarEntry in ipairs(xTarTable) do
+        -- Check if xTarEntry already exists in newTable
+        local found = false
+        for j, newEntry in ipairs(newTable) do
+            if newEntry.MobID == xTarEntry.MobID then
+                -- Update newTable entry with xTarEntry data
+                newTable[j]['MobAggro'] = xTarEntry['MobAggro']
+                break
+            end
+        end
     end
     Table_Cache.Rules = newTable
     Table_Cache.Mobs = newTable
@@ -345,7 +357,6 @@ local function DrawRuleRow(entry)
         end
     end
     ImGui.SameLine()
-
     ImGui.TableNextColumn()
     --Consider Color for Level Text
     COLOR.txtColor(entry.MobConColor)
@@ -364,8 +375,7 @@ local function DrawRuleRow(entry)
         COLOR.barColor('red')
         ImGui.ProgressBar(pctAggro, ImGui.GetColumnWidth(), 15)
         ImGui.PopStyleColor()
-    else
-    
+        else
     end
     ImGui.TableNextColumn()
     --Mob ID
@@ -375,7 +385,6 @@ local function DrawRuleRow(entry)
     ImGui.Text('%s', (entry.MobLoc))
     ImGui.TableNextColumn()
 end
-
 local function DrawSearchWindow()
     if GUI_Main.Locked then
         GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
@@ -557,14 +566,16 @@ local function DrawSearchWindow()
                 ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, GUI_Main.Table.Column_ID.MobLoc)
                 ImGui.TableHeadersRow()
                 local sortSpecs = ImGui.TableGetSortSpecs()
-                if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
-                    if #Table_Cache.Unhandled > 0 then
-                        GUI_Main.Table.SortSpecs = sortSpecs
-                        table.sort(Table_Cache.Unhandled, TableSortSpecs)
-                        GUI_Main.Table.SortSpecs = nil
+                if not TLO.Me.Zoning() then
+                    if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
+                        if #Table_Cache.Unhandled > 0 then
+                            GUI_Main.Table.SortSpecs = sortSpecs
+                            table.sort(Table_Cache.Unhandled, TableSortSpecs)
+                            GUI_Main.Table.SortSpecs = nil
+                        end
+                        sortSpecs.SpecsDirty = false
+                        GUI_Main.Refresh.Sort.Rules = false
                     end
-                    sortSpecs.SpecsDirty = false
-                    GUI_Main.Refresh.Sort.Rules = false
                 end
                 local clipper = ImGuiListClipper.new()
                 clipper:Begin(#Table_Cache.Unhandled)
@@ -580,7 +591,7 @@ local function DrawSearchWindow()
                 clipper:End()
                 ImGui.EndTable()
             end
-            elseif currentTab == "npcList" then
+        elseif currentTab == "npcList" then
             -- Tab for NPC List
             local npcs = settings[Zone.ShortName()] or {}
             local changed
@@ -641,21 +652,20 @@ local function DrawSearchWindow()
                         end
                         -- Display the name and handle interaction
                         ImGui.Text(displayName)
-                        if ImGui.IsItemHovered() and showTooltips then
-                            ImGui.BeginTooltip()
-                            ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
-                            ImGui.EndTooltip()
+                        if npc.isInAlerts then
+                            ImGui.PopStyleColor()
+                            if ImGui.IsItemHovered() and showTooltips then
+                                ImGui.BeginTooltip()
+                                ImGui.Text("Green Names are up!\n Right-Click to Navigate to " .. displayName)
+                                ImGui.EndTooltip()
+                            end
                             -- Right-click interaction uses the original spawnName
                             if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
                                 CMD('/nav spawn "' .. spawnName .. '"')
                             end
                         end
-                        if npc.isInAlerts then
-                            ImGui.PopStyleColor()
-                        end
                         ImGui.TableNextColumn()
                         ImGui.Text(Zone.ShortName())
-                        -- Correctly concatenate 'id' as a string for ImGui identifiers
                         local btnIcon = Icons.MD_DELETE
                         local buttonLabel = btnIcon .. "##Remove" .. tostring(index)
                         ImGui.TableNextColumn()
@@ -668,10 +678,11 @@ local function DrawSearchWindow()
                             ImGui.EndTooltip()
                         end
                     end
-                    ImGui.EndTable()
+                    ImGui.EndTable()                   
+                    --ImGui.EndTabItem()
                 end
-                else
-                ImGui.Text('No spawns in list for this zone. Add some!')
+            else
+            ImGui.Text('No spawns in list for this zone. Add some!')
             end
         end
         ImGui.PopStyleVar(1)
