@@ -189,13 +189,13 @@ local function SpawnToEntry(spawn, id, table)
     if spawn.ID() then
         local entry = {
             ID = id or 0,
-            MobName = spawn.CleanName(),
-            MobDirtyName = spawn.Name(),
-            MobZoneName = mq.TLO.Zone.Name(),
+            MobName = spawn.CleanName() or ' ',
+            MobDirtyName = spawn.Name() or ' ',
+            MobZoneName = mq.TLO.Zone.Name()or ' ',
             MobDist = math.floor(spawn.Distance() or 0),
-            MobLoc = spawn.Loc(),
-            MobID = spawn.ID(),
-            MobLvl = spawn.Level(),
+            MobLoc = spawn.Loc() or ' ',
+            MobID = spawn.ID()or 0,
+            MobLvl = spawn.Level()or 0,
             MobConColor = string.lower(spawn.ConColor() or 'white'),
             MobAggro = pAggro,
             Enum_Action = 'unhandled',
@@ -576,7 +576,7 @@ local function DrawSearchWindow()
                         sortSpecs.SpecsDirty = false
                         GUI_Main.Refresh.Sort.Rules = false
                     end
-                end
+               
                 local clipper = ImGuiListClipper.new()
                 clipper:Begin(#Table_Cache.Unhandled)
                 while clipper:Step() do
@@ -589,6 +589,7 @@ local function DrawSearchWindow()
                     end
                 end
                 clipper:End()
+            end
                 ImGui.EndTable()
             end
         elseif currentTab == "npcList" then
