@@ -641,18 +641,19 @@ local function DrawSearchWindow()
                         end
                         -- Display the name and handle interaction
                         ImGui.Text(displayName)
+                        if npc.isInAlerts then
+                            ImGui.PopStyleColor()
+                        
                         if ImGui.IsItemHovered() and showTooltips then
                             ImGui.BeginTooltip()
-                            ImGui.Text("Green Names are up! Right-Click to Navigate to " .. displayName)
+                            ImGui.Text("Green Names are up!\n Right-Click to Navigate to " .. displayName)
                             ImGui.EndTooltip()
                             -- Right-click interaction uses the original spawnName
                             if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
                                 CMD('/nav spawn "' .. spawnName .. '"')
                             end
                         end
-                        if npc.isInAlerts then
-                            ImGui.PopStyleColor()
-                        end
+                    end
                         ImGui.TableNextColumn()
                         ImGui.Text(Zone.ShortName())
                         -- Correctly concatenate 'id' as a string for ImGui identifiers
