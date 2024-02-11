@@ -1389,14 +1389,21 @@ local loop = function()
         end
         --CMD('/echo '..numAlerts)
         if check_safe_zone() ~= true then
-            if ((os.time() - alertTime) > (remindNPC * 60) and AlertWindow_Show == false and numAlerts >0) then
-                if doAlert then
-                    AlertWindow_Show = true
-                    AlertWindowOpen = true
-                    if not AlertWindowOpen then DrawAlertGUI() end
+            if ((os.time() - alertTime) > (remindNPC * 60)) then
+                for _, v in pairs(tSpawns) do
+                    local cleanName = tostring(v.CleanName())
+                    local distance = math.floor(v.Distance() or 0)
+                    print_ts(GetCharZone()..'\ag'..cleanName..'\ax spawn alert! '..distance..' units away.')
                 end
-                if doBeep then CMD('/beep') end
-                alertTime = os.time()
+                if (AlertWindow_Show == false and numAlerts >0) then
+                    if doAlert then
+                        AlertWindow_Show = true
+                        AlertWindowOpen = true
+                        if not AlertWindowOpen then DrawAlertGUI() end
+                    end
+                    if doBeep then CMD('/beep') end
+                    alertTime = os.time()
+                end
             end
         end
         if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
