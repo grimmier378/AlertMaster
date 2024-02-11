@@ -1402,8 +1402,8 @@ local loop = function()
                         if not AlertWindowOpen then DrawAlertGUI() end
                     end
                     if doBeep then CMD('/beep') end
-                    alertTime = os.time()
                 end
+                alertTime = os.time()
             end
         end
         if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
