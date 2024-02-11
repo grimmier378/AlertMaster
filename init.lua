@@ -33,7 +33,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '1.6'
+local amVer = '1.7'
 local CMD = mq.cmd
 local TLO = mq.TLO
 local Me = TLO.Me
@@ -52,6 +52,7 @@ local doBeep, doAlert = false, false
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
 local newSpawnName = ''
+local zSettings = false
 ---@class
 local DistColorRanges = {
     orange = 600, -- distance the color changes from green to orange
@@ -189,13 +190,13 @@ local function SpawnToEntry(spawn, id, table)
     if spawn.ID() then
         local entry = {
             ID = id or 0,
-            MobName = spawn.CleanName(),
-            MobDirtyName = spawn.Name(),
-            MobZoneName = mq.TLO.Zone.Name(),
+            MobName = spawn.CleanName() or ' ',
+            MobDirtyName = spawn.Name() or ' ',
+            MobZoneName = mq.TLO.Zone.Name()or ' ',
             MobDist = math.floor(spawn.Distance() or 0),
-            MobLoc = spawn.Loc(),
-            MobID = spawn.ID(),
-            MobLvl = spawn.Level(),
+            MobLoc = spawn.Loc() or ' ',
+            MobID = spawn.ID()or 0,
+            MobLvl = spawn.Level()or 0,
             MobConColor = string.lower(spawn.ConColor() or 'white'),
             MobAggro = pAggro,
             Enum_Action = 'unhandled',
@@ -576,7 +577,7 @@ local function DrawSearchWindow()
                         sortSpecs.SpecsDirty = false
                         GUI_Main.Refresh.Sort.Rules = false
                     end
-                end
+               
                 local clipper = ImGuiListClipper.new()
                 clipper:Begin(#Table_Cache.Unhandled)
                 while clipper:Step() do
@@ -589,6 +590,7 @@ local function DrawSearchWindow()
                     end
                 end
                 clipper:End()
+            end
                 ImGui.EndTable()
             end
         elseif currentTab == "npcList" then
@@ -1372,7 +1374,19 @@ local loop = function()
             check_for_announce()
             check_for_pcs()
         end
-        if Me.Zoning() then numAlerts = 0 end
+        if Me.Zoning() then 
+            numAlerts = 0 
+            if SearchWindow_Show then
+                SearchWindow_Show = false
+                zSettings = true
+            end
+        else
+            if zSettings then
+                RefreshZone()
+                SearchWindow_Show = true
+                zSettings = false
+            end
+        end
         --CMD('/echo '..numAlerts)
         if check_safe_zone() ~= true then
             if ((os.time() - alertTime) > (remindNPC * 60) and AlertWindow_Show == false and numAlerts >0) then
