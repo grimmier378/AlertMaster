@@ -44,7 +44,7 @@ local Raid = TLO.Raid
 local Zone = TLO.Zone
 local CharConfig = 'Char_'..Me.CleanName()..'_Config'
 local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
-local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
+local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
 local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
 local doBeep, doAlert = false, false
@@ -320,6 +320,7 @@ local function RefreshZone()
             if spawn.ID()>0 then InsertTableSpawn(xTarTable, spawn, tonumber(spawn.ID())) end
         end
     end
+    if showAggro then
     for _, xTarEntry in ipairs(xTarTable) do
         -- Check if xTarEntry already exists in newTable
         local found = false
@@ -331,6 +332,7 @@ local function RefreshZone()
             end
         end
     end
+end
     Table_Cache.Rules = newTable
     Table_Cache.Mobs = newTable
     GUI_Main.Refresh.Sort.Mobs = true
@@ -489,6 +491,22 @@ local function DrawSearchWindow()
         if ImGui.IsItemHovered() and showTooltips then
             ImGui.BeginTooltip()
             ImGui.Text("Add Target Clean Name to SpawnList\nThis is handy if you are hunting a specific type of Mob,\ntarget a moss snake and add, you will get all \"a moss snake\"")
+            ImGui.EndTooltip()
+        end
+        ImGui.SameLine(ImGui.GetWindowWidth() - 90)
+        -- Aggro Status Toggle Button
+        if showAggro then
+            ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+            if ImGui.Button(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
+            ImGui.PopStyleColor(1)
+            else
+            ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+            if ImGui.Button(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
+            ImGui.PopStyleColor(1)
+        end
+        if ImGui.IsItemHovered() and showTooltips then
+            ImGui.BeginTooltip()
+            ImGui.Text("Toggle Aggro Status On\\Off")
             ImGui.EndTooltip()
         end
         ImGui.SameLine(ImGui.GetWindowWidth() - 60)
@@ -802,6 +820,20 @@ local load_binds = function()
                 print_ts('\ayAlert PopUp Enabled.')
             end
         end
+        -- Aggro Display On/Off Toggle
+        if cmd == 'aggro' then
+            if showAggro then
+                showAggro = false
+                settings[CharConfig]['aggro'] = showAggro
+                save_settings()
+                print_ts('\ayShow Aggro Disabled.')
+                else
+                showAggro = true
+                settings[CharConfig]['aggro'] = showAggro
+                save_settings()
+                print_ts('\ayShow Aggro Enabled.')
+            end
+        end
         -- Beep On/Off Toggle
         if cmd == 'beep' then
             if doBeep then
@@ -1076,6 +1108,7 @@ local load_binds = function()
             print_ts('\t\ay/am spawndel npc\a-t -- delete monster from the list of tracked spawns')
             print_ts('\t\ay/am spawnlist\a-t -- display monsters being tracked for the current zone')
             print_ts('\t\ay/am show\a-t -- Toggles display of Search Window and Spawns for the current zone')
+            print_ts('\t\ay/am aggro\a-t -- Toggles display of Aggro status bars in the search window.')
             print_ts('\a-y- Commands - executed when players remain in the alert radius for the reminder interval')
             print_ts('\t\ay/am cmdadd command\a-t -- add command to run when someone enters your alert radius')
             print_ts('\t\ay/am cmddel command\a-t -- delete command to run when someone enters your alert radius')
@@ -1114,6 +1147,10 @@ local load_settings = function()
         settings[CharConfig]['beep'] = false
         save_settings()
     end
+    if settings[CharConfig]['aggro'] == nil then
+        settings[CharConfig]['aggro'] = false
+        save_settings()
+    end
     if settings[CharConfig]['remindNPC'] == nil then
         settings[CharConfig]['remindNPC'] = 5
         save_settings()
@@ -1138,6 +1175,7 @@ local load_settings = function()
     doBeep = settings[CharConfig]['beep']
     GUI_Main.Locked = settings[CharConfig]['locked']
     doAlert = settings[CharConfig]['popup']
+    showAggro = settings[CharConfig]['aggro']
     DistColorRanges.orange = settings[CharConfig]['distmid']
     DistColorRanges.red = settings[CharConfig]['distfar']
     if GUI_Main.Locked then
@@ -1389,20 +1427,24 @@ local loop = function()
         end
         --CMD('/echo '..numAlerts)
         if check_safe_zone() ~= true then
-            if ((os.time() - alertTime) > (remindNPC * 60)) then
+            if ((os.time() - alertTime) > (remindNPC * 60) and numAlerts >0) then -- if we're past the alert remindnpc time and we have alerts to give
+                -- do text alerts
                 for _, v in pairs(tSpawns) do
                     local cleanName = tostring(v.CleanName())
                     local distance = math.floor(v.Distance() or 0)
                     print_ts(GetCharZone()..'\ag'..cleanName..'\ax spawn alert! '..distance..' units away.')
                 end
-                if (AlertWindow_Show == false and numAlerts >0) then
+                --do beep alerts
+                if doBeep then CMD('/beep') end
+                --do popup alerts
+                if (AlertWindow_Show == false) then
                     if doAlert then
                         AlertWindow_Show = true
                         AlertWindowOpen = true
                         if not AlertWindowOpen then DrawAlertGUI() end
                     end
-                    if doBeep then CMD('/beep') end
                 end
+                --reset alertTime to current time
                 alertTime = os.time()
             end
         end
