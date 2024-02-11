@@ -52,6 +52,7 @@ local doBeep, doAlert = false, false
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
 local newSpawnName = ''
+local zSettings = false
 ---@class
 local DistColorRanges = {
     orange = 600, -- distance the color changes from green to orange
@@ -1373,7 +1374,19 @@ local loop = function()
             check_for_announce()
             check_for_pcs()
         end
-        if Me.Zoning() then numAlerts = 0 end
+        if Me.Zoning() then 
+            numAlerts = 0 
+            if SearchWindow_Show then
+                SearchWindow_Show = false
+                zSettings = true
+            end
+        else
+            if zSettings then
+                RefreshZone()
+                SearchWindow_Show = true
+                zSettings = false
+            end
+        end
         --CMD('/echo '..numAlerts)
         if check_safe_zone() ~= true then
             if ((os.time() - alertTime) > (remindNPC * 60) and AlertWindow_Show == false and numAlerts >0) then
