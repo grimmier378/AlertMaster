@@ -42,8 +42,9 @@ local NearestSpawn = TLO.NearestSpawn
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
-local CharConfig = 'Char_'..Me.CleanName()..'_Config'
-local CharCommands = 'Char_'..Me.CleanName()..'_Commands'
+local angle = 0
+local CharConfig = 'Char_'..Me.DisplayName()..'_Config'
+local CharCommands = 'Char_'..Me.DisplayName()..'_Commands'
 local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
 local tSafeZones, spawnAlerts = {}, {}
 local alertTime, numAlerts = 0,0
@@ -141,7 +142,7 @@ local GUI_Main = {
 -- helpers
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
 local GetCharZone = function()
-    return '\aw[\ao'..Me.CleanName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
+    return '\aw[\ao'..Me.DisplayName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
 end
 local print_ts = function(msg) print(MsgPrefix()..msg) end
 local function print_status()
@@ -201,7 +202,7 @@ local function SpawnToEntry(spawn, id, table)
             MobLvl = spawn.Level()or 0,
             MobConColor = string.lower(spawn.ConColor() or 'white'),
             MobAggro = pAggro,
-            MobDirection = spawn.HeadingTo() or '??',
+            MobDirection = spawn.HeadingTo() or '0',
             Enum_Action = 'unhandled',
         }
         return entry
@@ -391,26 +392,60 @@ local function getRelativeDirection(spawnDir)
     local spawnHeadingTo = directions(spawnDir)
     local difference = spawnHeadingTo - meHeading
 
-    difference = (difference + 360) % 360    
+    difference = (difference + 360) % 360
+    return difference
     -- Determine the relative direction
-    if difference <= 22.5 or difference > 337.5 then
-        return "Forward"
-    elseif difference > 22.5 and difference <= 67.5 then
-        return "Forward-Right"
-    elseif difference > 67.5 and difference <= 112.5 then
-        return "Right"
-    elseif difference > 112.5 and difference <= 157.5 then
-        return "Backward-Right"
-    elseif difference > 157.5 and difference <= 202.5 then
-        return "Backward"
-    elseif difference > 202.5 and difference <= 247.5 then
-        return "Backward-Left"
-    elseif difference > 247.5 and difference <= 292.5 then
-        return "Left"
-    elseif difference > 292.5 and difference <= 337.5 then
-        return "Forward-Left"
-    end
+    -- if difference <= 22.5 or difference > 337.5 then
+    --     return "Forward"
+    -- elseif difference > 22.5 and difference <= 67.5 then
+    --     return "Forward-Right"
+    -- elseif difference > 67.5 and difference <= 112.5 then
+    --     return "Right"
+    -- elseif difference > 112.5 and difference <= 157.5 then
+    --     return "Backward-Right"
+    -- elseif difference > 157.5 and difference <= 202.5 then
+    --     return "Backward"
+    -- elseif difference > 202.5 and difference <= 247.5 then
+    --     return "Backward-Left"
+    -- elseif difference > 247.5 and difference <= 292.5 then
+    --     return "Left"
+    -- elseif difference > 292.5 and difference <= 337.5 then
+    --     return "Forward-Left"
+    -- end
 end
+
+
+function RotatePoint(p, cx, cy, angle)
+    local radians = math.rad(angle)
+    local cosA = math.cos(radians)
+    local sinA = math.sin(radians)
+
+    local newX = cosA * (p.x - cx) - sinA * (p.y - cy) + cx
+    local newY = sinA * (p.x - cx) + cosA * (p.y - cy) + cy
+
+    return ImVec2(newX, newY)
+end
+
+function DrawArrow(topPoint, width, height, color)
+    local draw_list = ImGui.GetWindowDrawList()
+    local p1 = ImVec2(topPoint.x, topPoint.y)
+    local p2 = ImVec2(topPoint.x + width, topPoint.y + height)
+    local p3 = ImVec2(topPoint.x - width, topPoint.y + height)
+
+    -- center
+    local center_x = (p1.x + p2.x + p3.x) / 3
+    local center_y = (p1.y + p2.y + p3.y) / 3
+
+    -- rotate
+    angle = angle + .01
+    p1 = RotatePoint(p1, center_x, center_y, angle)
+    p2 = RotatePoint(p2, center_x, center_y, angle)
+    p3 = RotatePoint(p3, center_x, center_y, angle)
+
+    draw_list:AddTriangleFilled(p1, p2, p3, ImGui.GetColorU32(color))
+end
+
+
 ----------------------------
 local function DrawToggles()
     local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
@@ -571,7 +606,7 @@ local function DrawRuleRow(entry)
     --Distance
     local distance = math.floor(entry.MobDist or 0)
     ColorDistance(distance)
-    ImGui.Text(distance)
+    ImGui.Text(tostring(distance))
     ImGui.PopStyleColor()
     ImGui.TableNextColumn()
     --Mob Aggro
@@ -591,10 +626,14 @@ local function DrawRuleRow(entry)
     ImGui.TableNextColumn()
     --Mob Direction
     COLOR.txtColor('light blue2')
-    ImGui.SetWindowFontScale(1.25)
-    getCoarseDirection(entry.MobDirection)
+    --ImGui.SetWindowFontScale(1.25)
+   -- getCoarseDirection(entry.MobDirection)
     ImGui.PopStyleColor()
-    ImGui.SetWindowFontScale(1)
+  --  angle = entry.MobDirection or 0
+    angle = getRelativeDirection(entry.MobDirection) or 0
+   local cursorScreenPos = ImGui.GetCursorScreenPosVec()
+    DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ImVec4(133, 0, 220, 255))
+   ImGui.SetWindowFontScale(1)
     ImGui.TableNextColumn()
 end
 local function DrawSearchWindow()
@@ -810,6 +849,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
             ImGui.TableSetupColumn("Direction", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
             ImGui.TableHeadersRow()
             for id, spawnData in pairs(spawnAlerts) do
+                local sHeadingTo = mq.TLO.Spawn(spawnData.ID).HeadingTo() or 0
                 ImGui.TableNextRow()
                 ImGui.TableSetColumnIndex(0)
                 COLOR.txtColor('green')
@@ -829,8 +869,14 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
                 ImGui.Text('\t'..tostring(distance))
                 ImGui.PopStyleColor()
                 ImGui.TableSetColumnIndex(2)
-                COLOR.txtColor('light blue')
-                getCoarseDirection(spawnData.HeadingTo())
+                --COLOR.txtColor('light blue')
+                angle = getRelativeDirection(sHeadingTo) or 0
+              --  angle = (mq.TLO.Spawn(spawnData.ID).HeadingTo.DegreesCCW() or 0)
+                --ImGui.Text(tostring(angle))
+                --Usage:
+                 local cursorScreenPos = ImGui.GetCursorScreenPosVec()
+
+                DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ImVec4(150, 150, 0, 255))
                 ImGui.PopStyleColor()
             end
             ImGui.EndTable()
@@ -1110,12 +1156,12 @@ local load_binds = function()
             print_ts('\ayRemoved Command \"'..val_str..'\"')
             elseif cmd == 'cmdlist' then
             if getTableSize(settings[CharCommands]) > 0 then
-                print_ts('\ayCommands (\a-t'..Me.CleanName()..'\ax): ')
+                print_ts('\ayCommands (\a-t'..Me.DisplayName()..'\ax): ')
                 for k, v in pairs(settings[CharCommands]) do
                     print_ts('\t\a-t'..k..' - '..v)
                 end
                 else
-                print_ts('\ayCommands (\a-t'..Me.CleanName()..'\ax): No commands configured.')
+                print_ts('\ayCommands (\a-t'..Me.DisplayName()..'\ax): No commands configured.')
             end
         end
         -- adding/removing/listing ignored pcs
@@ -1142,12 +1188,12 @@ local load_binds = function()
             print_ts('\ayNo longer ignoring \"'..val_str..'\"')
             elseif cmd == 'ignorelist' then
             if getTableSize(settings['Ignore']) > 0 then
-                print_ts('\ayIgnore List (\a-t'..Me.CleanName()..'\ax): ')
+                print_ts('\ayIgnore List (\a-t'..Me.DisplayName()..'\ax): ')
                 for k, v in pairs(settings['Ignore']) do
                     print_ts('\t\a-t'..k..' - '..v)
                 end
                 else
-                print_ts('\ayIgnore List (\a-t'..Me.CleanName()..'\ax): No ignore list configured.')
+                print_ts('\ayIgnore List (\a-t'..Me.DisplayName()..'\ax): No ignore list configured.')
             end
         end
         -- Announce Alerts
@@ -1395,7 +1441,7 @@ end
 local check_for_pcs = function()
     if active and pcs then
         local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..Me.ID())
-        local charZone = '\aw[\a-o'..Me.CleanName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+        local charZone = '\aw[\a-o'..Me.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
         if tmp ~= nil then
             for name, v in pairs(tmp) do
                 if tPlayers[name] == nil then
@@ -1423,7 +1469,7 @@ local check_for_spawns = function()
     if active and spawns then
         local tmp = spawn_search_npcs()
         local spawnAlertsUpdated = false
-        local charZone = '\aw[\a-o'..Me.CleanName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+        local charZone = '\aw[\a-o'..Me.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
         if tmp ~= nil then
             for id, v in pairs(tmp) do
                 if tSpawns[id] == nil then
@@ -1473,7 +1519,7 @@ end
 local check_for_announce = function()
     if active and announce then
         local tmp = spawn_search_players('pc notid '..Me.ID())
-        local charZone = '\aw[\a-o'..Me.CleanName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+        local charZone = '\aw[\a-o'..Me.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
         if tmp ~= nil then
             for name, v in pairs(tmp) do
                 if tAnnounce[name] == nil then
