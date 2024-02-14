@@ -178,7 +178,7 @@ local function ColorDistance(distance)
 end
 function isSpawnInAlerts(spawnName, spawnAlerts)
     for _, spawnData in pairs(spawnAlerts) do
-        if spawnData.CleanName() == spawnName or spawnData.Name() == spawnName then
+        if spawnData.DisplayName() == spawnName or spawnData.Name() == spawnName then
             return true
         end
     end
@@ -193,7 +193,7 @@ local function SpawnToEntry(spawn, id, table)
     if spawn.ID() then
         local entry = {
             ID = id or 0,
-            MobName = spawn.CleanName() or ' ',
+            MobName = spawn.DisplayName() or ' ',
             MobDirtyName = spawn.Name() or ' ',
             MobZoneName = mq.TLO.Zone.Name()or ' ',
             MobDist = math.floor(spawn.Distance() or 0),
@@ -523,7 +523,7 @@ local function DrawToggles()
     ImGui.SameLine()
     -- Button to add the new spawn
     if ImGui.Button(Icons.FA_BULLSEYE) then
-        CMD('/am spawnadd "${Target.CleanName}"')
+        CMD('/am spawnadd "${Target.DisplayName}"')
         npcs = settings[Zone.ShortName()] or {}
     end
     if ImGui.IsItemHovered() and showTooltips then
@@ -742,7 +742,7 @@ local function DrawSearchWindow()
             newSpawnName, changed = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
             if ImGui.IsItemHovered() and showTooltips then
                 ImGui.BeginTooltip()
-                ImGui.Text("Enter Spawn Name this is CaseSensative,\n also accepts variables like: ${Target.CleanName} and ${Target.Name}")
+                ImGui.Text("Enter Spawn Name this is CaseSensative,\n also accepts variables like: ${Target.DisplayName} and ${Target.Name}")
                 ImGui.EndTooltip()
             end
             ImGui.SameLine()
@@ -853,11 +853,11 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
                 ImGui.TableNextRow()
                 ImGui.TableSetColumnIndex(0)
                 COLOR.txtColor('green')
-                ImGui.Text(spawnData.CleanName())
+                ImGui.Text(spawnData.DisplayName())
                 ImGui.PopStyleColor(1)
                 if ImGui.IsItemHovered() and showTooltips then
                     ImGui.BeginTooltip()
-                    ImGui.Text("Right-Click to Navigate: "..spawnData.CleanName())
+                    ImGui.Text("Right-Click to Navigate: "..spawnData.DisplayName())
                     ImGui.EndTooltip()
                     if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
                         CMD('/nav id "' .. spawnData.ID() .. '"')
@@ -1116,9 +1116,9 @@ local load_binds = function()
                     local up = false
                     local name
                     for _, spawn in pairs(tSpawns) do
-                        if string.find(spawn.CleanName(), v) ~= nil then
+                        if string.find(spawn.DisplayName(), v) ~= nil then
                             up = true
-                            name = spawn.CleanName()
+                            name = spawn.DisplayName()
                             break
                         end
                     end
@@ -1351,7 +1351,7 @@ local setup = function()
 end
 ---@param spawn MQSpawn
 local should_include_player = function(spawn)
-    local name = spawn.CleanName()
+    local name = spawn.DisplayName()
     local guild = spawn.Guild()
     -- if pc exists on the ignore list, skip
     if settings['Ignore'] ~= nil then
@@ -1377,8 +1377,8 @@ local spawn_search_players = function(search)
     if cnt ~= nil or cnt > 0 then
         for i = 1, cnt do
             local pc = NearestSpawn(i,search)
-            if pc ~= nil and pc.CleanName() ~= nil then
-                local name = pc.CleanName()
+            if pc ~= nil and pc.DisplayName() ~= nil then
+                local name = pc.DisplayName()
                 local guild = pc.Guild() or 'No Guild'
                 if should_include_player(pc) then
                     tmp[name] = {
@@ -1405,7 +1405,7 @@ local spawn_search_npcs = function()
                 local id = spawn.ID()
                 if spawn ~= nil and id ~= nil then
                     -- Case-sensitive comparison using CleanName for exact matching
-                    if spawn.CleanName() == v or spawn.Name() == v then
+                    if spawn.DisplayName() == v or spawn.Name() == v then
                         tmp[id] = spawn
                     end
                 end
@@ -1474,7 +1474,7 @@ local check_for_spawns = function()
             for id, v in pairs(tmp) do
                 if tSpawns[id] == nil then
                     if check_safe_zone() ~= true then
-                        print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
+                        print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
                         spawnAlertsUpdated = true
                     end
                     tSpawns[id] = v
@@ -1486,7 +1486,7 @@ local check_for_spawns = function()
                 for id, v in pairs(tSpawns) do
                     if tmp[id] == nil then
                         if check_safe_zone() ~= true then
-                            print_ts(GetCharZone()..'\ag'..tostring(v.CleanName())..'\ax was killed or despawned.')
+                            print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax was killed or despawned.')
                             spawnAlertsUpdated = false
                         end
                         tSpawns[id] = nil
@@ -1574,7 +1574,7 @@ local loop = function()
             if ((os.time() - alertTime) > (remindNPC * 60) and numAlerts >0) then -- if we're past the alert remindnpc time and we have alerts to give
                 -- do text alerts
                 for _, v in pairs(tSpawns) do
-                    local cleanName = tostring(v.CleanName())
+                    local cleanName = tostring(v.DisplayName())
                     local distance = math.floor(v.Distance() or 0)
                     print_ts(GetCharZone()..'\ag'..cleanName..'\ax spawn alert! '..distance..' units away.')
                 end
