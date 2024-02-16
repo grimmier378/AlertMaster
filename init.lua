@@ -666,6 +666,11 @@ local function DrawSearchWindow()
             currentTab = "zone"
             RefreshZone()
         end
+        if ImGui.IsItemHovered() then
+            ImGui.BeginTooltip()
+            ImGui.Text('Spawn Count: '..tostring(#Table_Cache.Unhandled))
+            ImGui.EndTooltip()
+        end
         ImGui.SameLine()
         local tabLabel = "NPC List"
         if next(spawnAlerts) ~= nil then
@@ -697,6 +702,7 @@ local function DrawSearchWindow()
                 GUI_Main.Refresh.Table.Unhandled = true
             end
             ImGui.Separator()
+
             if ImGui.BeginTable('##RulesTable', 8, GUI_Main.Table.Flags) then
                 ImGui.TableSetupScrollFreeze(0, 1)
                 ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
@@ -720,20 +726,21 @@ local function DrawSearchWindow()
                         GUI_Main.Refresh.Sort.Rules = false
                     end
                
-                local clipper = ImGuiListClipper.new()
-                clipper:Begin(#Table_Cache.Unhandled)
-                while clipper:Step() do
-                    for i = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do
-                        local entry = Table_Cache.Unhandled[i + 1]
-                        ImGui.PushID(entry.ID)
-                        ImGui.TableNextRow()
-                        DrawRuleRow(entry)
-                        ImGui.PopID()
+                    local clipper = ImGuiListClipper.new()
+                    clipper:Begin(#Table_Cache.Unhandled)
+                    while clipper:Step() do
+                        for i = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do
+                            local entry = Table_Cache.Unhandled[i + 1]
+                            ImGui.PushID(entry.ID)
+                            ImGui.TableNextRow()
+                            DrawRuleRow(entry)
+                            ImGui.PopID()
+                        end
                     end
+                    clipper:End()
                 end
-                clipper:End()
-            end
                 ImGui.EndTable()
+                
             end
         elseif currentTab == "npcList" then
             -- Tab for NPC List
@@ -1240,11 +1247,11 @@ local load_binds = function()
             print_ts('\t\ay/am remind #\a-t -- configure Player and GM alert reminder interval (seconds)')
             print_ts('\t\ay/am remindnpc #\a-t -- configure NPC alert reminder interval (Minutes)')
             print_ts('\t\ay/am popup\a-t -- Toggles Display of Alert Window')
-            print_ts('\t\ay/am dismid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
+            print_ts('\t\ay/am distmid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
             print_ts('\t\ay/am distfar\a-t -- Sets the distnace the color changes from \a-oOrange \a-tto \a-rRed')
             print_ts('\a-y- Ignore List -')
-            print_ts('\t\ay/am ignoreadd pc\a-t -- add pc to the ignore list')
-            print_ts('\t\ay/am ignoredel pc\a-t -- delete pc from the ignore list')
+            print_ts('\t\ay/am ignoreadd pcname\a-t -- add pc to the ignore list')
+            print_ts('\t\ay/am ignoredel pcname\a-t -- delete pc from the ignore list')
             print_ts('\t\ay/am ignorelist\a-t -- display ignore list')
             print_ts('\a-y- Spawns -')
             print_ts('\t\ay/am spawnadd npc\a-t -- add monster to the list of tracked spawns')
