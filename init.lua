@@ -33,7 +33,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '1.8'
+local amVer = '1.8.2'
 local CMD = mq.cmd
 local TLO = mq.TLO
 local Me = TLO.Me
@@ -163,6 +163,77 @@ local save_settings = function()
 end
 local check_safe_zone = function()
 	return tSafeZones[Zone.ShortName():lower()]
+end
+
+local load_settings = function()
+	config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
+	settings_file = '/config/AlertMaster.ini'
+	settings_path = config_dir..settings_file
+	if file_exists(settings_path) then
+		settings = LIP.load(settings_path)
+		else
+		settings = {
+			[CharConfig] = defaultConfig,
+			[CharCommands] = {},
+			Ignore = {}
+		}
+		save_settings()
+	end
+	-- if this character doesn't have the sections in the ini, create them
+	if settings[CharConfig] == nil then settings[CharConfig] = defaultConfig end
+	if settings[CharCommands] == nil then settings[CharCommands] = {} end
+	if settings['SafeZones'] == nil then settings['SafeZones'] = {} end
+	delay = settings[CharConfig]['delay']
+	remind = settings[CharConfig]['remind']
+	pcs = settings[CharConfig]['pcs']
+	spawns = settings[CharConfig]['spawns']
+	gms = settings[CharConfig]['gms']
+	announce = settings[CharConfig]['announce']
+	ignoreguild = settings[CharConfig]['ignoreguild']
+	if settings[CharConfig]['beep'] == nil then
+		settings[CharConfig]['beep'] = false
+		save_settings()
+	end
+	if settings[CharConfig]['aggro'] == nil then
+		settings[CharConfig]['aggro'] = false
+		save_settings()
+	end
+	if settings[CharConfig]['remindNPC'] == nil then
+		settings[CharConfig]['remindNPC'] = 5
+		save_settings()
+	end
+	if settings[CharConfig]['popup'] == nil then
+		settings[CharConfig]['popup'] = false
+		save_settings()
+	end
+	if settings[CharConfig]['distmid'] == nil then
+		settings[CharConfig]['distmid'] = 600
+		save_settings()
+	end
+	if settings[CharConfig]['distfar'] == nil then
+		settings[CharConfig]['distfar'] = 1200
+		save_settings()
+	end
+	if settings[CharConfig]['locked'] == nil then
+		settings[CharConfig]['locked'] = false
+		save_settings()
+	end
+	remindNPC = settings[CharConfig]['remindNPC']
+	doBeep = settings[CharConfig]['beep']
+	GUI_Main.Locked = settings[CharConfig]['locked']
+	doAlert = settings[CharConfig]['popup']
+	showAggro = settings[CharConfig]['aggro']
+	DistColorRanges.orange = settings[CharConfig]['distmid']
+	DistColorRanges.red = settings[CharConfig]['distfar']
+	if GUI_Main.Locked then
+		SearchWindow_Show = true
+		SearchWindowOpen = true
+		else
+		SearchWindow_Show = false
+		SearchWindowOpen = false
+	end
+	-- setup safe zone "set"
+	for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
 local function ColorDistance(distance)
 	if distance < DistColorRanges.orange then
@@ -1026,6 +1097,11 @@ local load_binds = function()
 			pcs = false
 			print_ts('\ayPC alerting disabled.')
 		end
+		-- enabling/disabling pcs alerts
+		if cmd == 'reload' then
+			load_settings()
+			print_ts("\ayReloading Settings from File!")
+		end
 		-- adding/removing/listing spawn alerts for current zone
 		if cmd == 'spawnadd' and val_str:len() > 0 then
 			-- if the zone doesn't exist in ini yet, create a new table
@@ -1203,6 +1279,7 @@ local load_binds = function()
 			print_ts('\t\ay/am remind #\a-t -- configure Player and GM alert reminder interval (seconds)')
 			print_ts('\t\ay/am remindnpc #\a-t -- configure NPC alert reminder interval (Minutes)')
 			print_ts('\t\ay/am popup\a-t -- Toggles Display of Alert Window')
+			print_ts('\t\ay/am reload\a-t -- Reload the ini file')
 			print_ts('\t\ay/am distmid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
 			print_ts('\t\ay/am distfar\a-t -- Sets the distnace the color changes from \a-oOrange \a-tto \a-rRed')
 			print_ts('\a-y- Ignore List -')
@@ -1223,76 +1300,6 @@ local load_binds = function()
 	end
 	mq.bind('/alertmaster', bind_alertmaster)
 	mq.bind('/am', bind_alertmaster)
-end
-local load_settings = function()
-	config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
-	settings_file = '/config/AlertMaster.ini'
-	settings_path = config_dir..settings_file
-	if file_exists(settings_path) then
-		settings = LIP.load(settings_path)
-		else
-		settings = {
-			[CharConfig] = defaultConfig,
-			[CharCommands] = {},
-			Ignore = {}
-		}
-		save_settings()
-	end
-	-- if this character doesn't have the sections in the ini, create them
-	if settings[CharConfig] == nil then settings[CharConfig] = defaultConfig end
-	if settings[CharCommands] == nil then settings[CharCommands] = {} end
-	if settings['SafeZones'] == nil then settings['SafeZones'] = {} end
-	delay = settings[CharConfig]['delay']
-	remind = settings[CharConfig]['remind']
-	pcs = settings[CharConfig]['pcs']
-	spawns = settings[CharConfig]['spawns']
-	gms = settings[CharConfig]['gms']
-	announce = settings[CharConfig]['announce']
-	ignoreguild = settings[CharConfig]['ignoreguild']
-	if settings[CharConfig]['beep'] == nil then
-		settings[CharConfig]['beep'] = false
-		save_settings()
-	end
-	if settings[CharConfig]['aggro'] == nil then
-		settings[CharConfig]['aggro'] = false
-		save_settings()
-	end
-	if settings[CharConfig]['remindNPC'] == nil then
-		settings[CharConfig]['remindNPC'] = 5
-		save_settings()
-	end
-	if settings[CharConfig]['popup'] == nil then
-		settings[CharConfig]['popup'] = false
-		save_settings()
-	end
-	if settings[CharConfig]['distmid'] == nil then
-		settings[CharConfig]['distmid'] = 600
-		save_settings()
-	end
-	if settings[CharConfig]['distfar'] == nil then
-		settings[CharConfig]['distfar'] = 1200
-		save_settings()
-	end
-	if settings[CharConfig]['locked'] == nil then
-		settings[CharConfig]['locked'] = false
-		save_settings()
-	end
-	remindNPC = settings[CharConfig]['remindNPC']
-	doBeep = settings[CharConfig]['beep']
-	GUI_Main.Locked = settings[CharConfig]['locked']
-	doAlert = settings[CharConfig]['popup']
-	showAggro = settings[CharConfig]['aggro']
-	DistColorRanges.orange = settings[CharConfig]['distmid']
-	DistColorRanges.red = settings[CharConfig]['distfar']
-	if GUI_Main.Locked then
-		SearchWindow_Show = true
-		SearchWindowOpen = true
-		else
-		SearchWindow_Show = false
-		SearchWindowOpen = false
-	end
-	-- setup safe zone "set"
-	for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
 local setup = function()
 	active = true
