@@ -941,7 +941,7 @@ function DrawAlertGUI() -- Draw GUI Window
 	end
 end
 local function DrawSearchGUI()
-	RefreshZone()
+	--RefreshZone() -- shouldn't need this since we are refreshing every delay anyway.
 	DrawSearchWindow()
 end
 local load_binds = function()
