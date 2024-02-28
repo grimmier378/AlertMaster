@@ -665,7 +665,7 @@ local function DrawRuleRow(entry)
 	if DoDrawArrow then
 		angle = getRelativeDirection(entry.MobDirection) or 0
 		local cursorScreenPos = ImGui.GetCursorScreenPosVec()
-		DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ImVec4(133, 0, 220, 255))
+		DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
 	end
 	ImGui.SetWindowFontScale(1)
 	ImGui.TableNextColumn()
@@ -787,7 +787,6 @@ local function DrawSearchWindow()
 			-- Button to add the new spawn
 			if ImGui.Button(Icons.FA_USER_PLUS) and newSpawnName ~= "" then
 				CMD('/am spawnadd "'..newSpawnName..'"')
-				-- print(newSpawnName)  -- For debugging
 				newSpawnName = ""  -- Clear the input text after adding
 				npcs = settings[Zone.ShortName()] or {}
 			end
@@ -819,7 +818,6 @@ local function DrawSearchWindow()
 				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
 					-- Set up table headers
 					ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
-					--  ImGui.TableSetupColumn("Dir", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 					ImGui.TableSetupColumn("Zone", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 					ImGui.TableSetupColumn(Icons.MD_DELETE)
 					ImGui.TableHeadersRow()
@@ -850,10 +848,6 @@ local function DrawSearchWindow()
 						end
 						ImGui.TableNextColumn()
 						ImGui.Text(Zone.ShortName())
-						-- ImGui.TableNextColumn()
-						-- COLOR.color('light blue')
-						-- ImGui.Text(sHeading)
-						-- ImGui.PopStyleColor()
 						local btnIcon = Icons.MD_DELETE
 						local buttonLabel = btnIcon .. "##Remove" .. tostring(index)
 						ImGui.TableNextColumn()
@@ -867,7 +861,6 @@ local function DrawSearchWindow()
 						end
 					end
 					ImGui.EndTable()
-					--ImGui.EndTabItem()
 				end
 				else
 				ImGui.Text('No spawns in list for this zone. Add some!')
@@ -881,8 +874,8 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
 		if ImGui.BeginTable("AlertTable", 3,spawnListFlags) then
-			ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
-			ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
+			ImGui.TableSetupColumn("Distance", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
 			ImGui.TableSetupColumn("Direction", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 			ImGui.TableHeadersRow()
 			for id, spawnData in pairs(spawnAlerts) do
@@ -906,11 +899,11 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 				ImGui.Text('\t'..tostring(distance))
 				ImGui.PopStyleColor()
 				ImGui.TableSetColumnIndex(2)
-				if DoDrawArrow then
+				--if DoDrawArrow then
 					angle = getRelativeDirection(sHeadingTo) or 0
 					local cursorScreenPos = ImGui.GetCursorScreenPosVec()
-					DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ImVec4(150, 150, 0, 255))
-				end
+					DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
+				--end
 			end
 			ImGui.EndTable()
 		end
