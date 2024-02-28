@@ -164,7 +164,6 @@ end
 local check_safe_zone = function()
 	return tSafeZones[Zone.ShortName():lower()]
 end
-
 local load_settings = function()
 	config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
 	settings_file = '/config/AlertMaster.ini'
@@ -238,13 +237,13 @@ end
 local function ColorDistance(distance)
 	if distance < DistColorRanges.orange then
 		-- Green color for Close Range
-		ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 1.0, 0.0, 1.0) -- RGBA
+		return COLOR.color('green')
 		elseif distance >= DistColorRanges.orange and distance <= DistColorRanges.red then
 		-- Orange color for Mid Range
-		ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.76, 0.03, 1.0) -- RGBA
+		return COLOR.color('orange')
 		else
 		-- Red color for Far Distance
-		ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 0.0, 1.0) -- RGBA
+		return COLOR.color('red')
 	end
 end
 function isSpawnInAlerts(spawnName, spawnAlerts)
@@ -637,20 +636,20 @@ local function DrawRuleRow(entry)
 	ImGui.SameLine()
 	ImGui.TableNextColumn()
 	--Consider Color for Level Text
-	COLOR.txtColor(entry.MobConColor)
+	ImGui.PushStyleColor(ImGuiCol.Text,COLOR.color(entry.MobConColor))
 	ImGui.Text('%s', (entry.MobLvl))
 	ImGui.PopStyleColor()
 	ImGui.TableNextColumn()
 	--Distance
 	local distance = math.floor(entry.MobDist or 0)
-	ColorDistance(distance)
+	ImGui.PushStyleColor(ImGuiCol.Text,ColorDistance(distance))
 	ImGui.Text(tostring(distance))
 	ImGui.PopStyleColor()
 	ImGui.TableNextColumn()
 	--Mob Aggro
 	if entry.MobAggro ~= 0 then
 		local pctAggro = tonumber(entry.MobAggro)/100
-		COLOR.barColor('red')
+		ImGui.PushStyleColor(ImGuiCol.PlotHistogram,COLOR.color('red'))
 		ImGui.ProgressBar(pctAggro, ImGui.GetColumnWidth(), 15)
 		ImGui.PopStyleColor()
 		else
@@ -666,7 +665,7 @@ local function DrawRuleRow(entry)
 	if DoDrawArrow then
 		angle = getRelativeDirection(entry.MobDirection) or 0
 		local cursorScreenPos = ImGui.GetCursorScreenPosVec()
-		DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ImVec4(133, 0, 220, 255))
+		DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
 	end
 	ImGui.SetWindowFontScale(1)
 	ImGui.TableNextColumn()
@@ -788,7 +787,6 @@ local function DrawSearchWindow()
 			-- Button to add the new spawn
 			if ImGui.Button(Icons.FA_USER_PLUS) and newSpawnName ~= "" then
 				CMD('/am spawnadd "'..newSpawnName..'"')
-				-- print(newSpawnName)  -- For debugging
 				newSpawnName = ""  -- Clear the input text after adding
 				npcs = settings[Zone.ShortName()] or {}
 			end
@@ -820,7 +818,6 @@ local function DrawSearchWindow()
 				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
 					-- Set up table headers
 					ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
-					--  ImGui.TableSetupColumn("Dir", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 					ImGui.TableSetupColumn("Zone", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 					ImGui.TableSetupColumn(Icons.MD_DELETE)
 					ImGui.TableHeadersRow()
@@ -851,10 +848,6 @@ local function DrawSearchWindow()
 						end
 						ImGui.TableNextColumn()
 						ImGui.Text(Zone.ShortName())
-						-- ImGui.TableNextColumn()
-						-- COLOR.txtColor('light blue')
-						-- ImGui.Text(sHeading)
-						-- ImGui.PopStyleColor()
 						local btnIcon = Icons.MD_DELETE
 						local buttonLabel = btnIcon .. "##Remove" .. tostring(index)
 						ImGui.TableNextColumn()
@@ -868,7 +861,6 @@ local function DrawSearchWindow()
 						end
 					end
 					ImGui.EndTable()
-					--ImGui.EndTabItem()
 				end
 				else
 				ImGui.Text('No spawns in list for this zone. Add some!')
@@ -882,15 +874,15 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
 		if ImGui.BeginTable("AlertTable", 3,spawnListFlags) then
-			ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
-			ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
+			ImGui.TableSetupColumn("Distance", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
 			ImGui.TableSetupColumn("Direction", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 			ImGui.TableHeadersRow()
 			for id, spawnData in pairs(spawnAlerts) do
 				local sHeadingTo = mq.TLO.Spawn(spawnData.ID).HeadingTo() or 0
 				ImGui.TableNextRow()
 				ImGui.TableSetColumnIndex(0)
-				COLOR.txtColor('green')
+				ImGui.PushStyleColor(ImGuiCol.Text,COLOR.color('green'))
 				ImGui.Text(spawnData.DisplayName())
 				ImGui.PopStyleColor(1)
 				if ImGui.IsItemHovered() and showTooltips then
@@ -903,15 +895,15 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 				end
 				ImGui.TableSetColumnIndex(1)
 				local distance = math.floor(spawnData.Distance() or 0)
-				ColorDistance(distance)
+				ImGui.PushStyleColor(ImGuiCol.Text,ColorDistance(distance))
 				ImGui.Text('\t'..tostring(distance))
 				ImGui.PopStyleColor()
 				ImGui.TableSetColumnIndex(2)
-				if DoDrawArrow then
+				--if DoDrawArrow then
 					angle = getRelativeDirection(sHeadingTo) or 0
 					local cursorScreenPos = ImGui.GetCursorScreenPosVec()
-					DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ImVec4(150, 150, 0, 255))
-				end
+					DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
+				--end
 			end
 			ImGui.EndTable()
 		end
@@ -1569,4 +1561,4 @@ local loop = function()
 	end
 end
 setup()
-loop()																																																																					
+loop()																																			
