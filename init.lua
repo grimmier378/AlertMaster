@@ -631,16 +631,16 @@ local function DrawRuleRow(entry)
 	ImGui.Text('%s', entry.MobName)
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
-		ImGui.Text("Right-Click to Navigate\n Ctrl + Right Click Group Nav")
+		ImGui.Text("Left-Click to Navigate\nRight-Click Group Nav")
 		ImGui.EndTooltip()
 	end
 		-- Right-click interaction uses the original spawnName
 		if ImGui.IsItemHovered() then
-			if ImGuiMod.Ctrl and ImGui.IsMouseReleased(1) then
-				CMD(groupCmd..'/nav id "' .. entry.MobID .. '"')
+			if ImGui.IsMouseReleased(1) then
+				mq.cmdf("/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s",groupCmd,entry.MobID)
 			elseif
-				ImGui.IsMouseReleased(1) then
-					CMD('/nav id "' .. entry.MobID .. '"')
+				ImGui.IsMouseReleased(0) then
+				mq.cmdf('/nav id %s',entry.MobID)
 			end
 		end
 	ImGui.SameLine()
@@ -849,16 +849,16 @@ local function DrawSearchWindow()
 							ImGui.PopStyleColor()
 							if ImGui.IsItemHovered() and showTooltips then
 								ImGui.BeginTooltip()
-								ImGui.Text("Green Names are up!\n Right-Click to Navigate to " .. displayName.."\n Ctrl + Right-Click to Group Navigate to " .. displayName)
+								ImGui.Text("Green Names are up!\n Left-Click to Navigate to " .. displayName.."\n Right-Click to Group Navigate to " .. displayName)
 								ImGui.EndTooltip()
 							end
 							-- Right-click interaction uses the original spawnName
 							if ImGui.IsItemHovered() then
-								if ImGuiMod.Ctrl and ImGui.IsMouseReleased(1) then
-									CMD(groupCmd..'/nav spawn "' .. spawnName.. '"')
+								if ImGui.IsMouseReleased(1) then
+									mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav spawn "%s"',groupCmd,spawnName)
 								elseif
-									ImGui.IsMouseReleased(1) then
-										CMD('/nav spawn "' .. spawnName .. '"')
+									ImGui.IsMouseReleased(0) then
+									mq.cmdf('/nav spawn "%s"',spawnName)
 								end
 							end
 						end
@@ -904,15 +904,15 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 				ImGui.PopStyleColor(1)
 				if ImGui.IsItemHovered() and showTooltips then
 					ImGui.BeginTooltip()
-					ImGui.Text("Right-Click to Navigate: "..spawnData.DisplayName().."\nCtrl + Right-Click to Group Navigate: "..spawnData.DisplayName())
+					ImGui.Text("Left-Click to Navigate: "..spawnData.DisplayName().."\nRight-Click to Group Navigate: "..spawnData.DisplayName())
 					ImGui.EndTooltip()
 				end
 					if ImGui.IsItemHovered() then
-						if ImGuiMod.Ctrl and ImGui.IsMouseReleased(1) then
-							CMD(groupCmd..'nav id "' .. spawnData.ID() .. '"')
+						if ImGui.IsMouseReleased(1) then
+							mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s',groupCmd,spawnData.ID())
 						elseif
-							ImGui.IsMouseReleased(1) then
-								CMD('/nav id "' .. spawnData.ID() .. '"')
+							ImGui.IsMouseReleased(0) then
+							mq.cmdf('/nav id %s',spawnData.ID())
 						end
 					end
 				ImGui.TableSetColumnIndex(1)
