@@ -13,7 +13,6 @@
 	* /am popup will toggle the alert popup window.
 	** Search Window **
 	* You can search with the search box
-	* Sort by columns (Shift-Clicking Columns will MultiSort based onthe order you click.)
 	* Clicking the check box for track, and the spawn will be added to spawnlist
 	* Clicking ignore will remove the spawn from the list if it exists.
 	* you can navTo any spawn in the search window by clicking the button, rightclicking the name will target the spawn.
@@ -42,6 +41,7 @@ local NearestSpawn = TLO.NearestSpawn
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
+local groupCmd = '/dgae ' -- assumes DanNet, if EQBC found we switch to '/bcca /'
 local angle = 0
 local CharConfig = 'Char_'..Me.DisplayName()..'_Config'
 local CharCommands = 'Char_'..Me.DisplayName()..'_Commands'
@@ -68,7 +68,7 @@ local xTarTable = {}
 local alertFlags = bit32.bor(ImGuiWindowFlags.NoCollapse)
 local spawnListFlags = bit32.bor(
 	ImGuiTableFlags.Resizable,
-	ImGuiTableFlags.RowBg,
+	ImGuiTableFlags.Sortable,
 	ImGuiTableFlags.SizingFixedFit,
 	ImGuiTableFlags.BordersV,
 	ImGuiTableFlags.BordersOuter,
@@ -217,8 +217,13 @@ local load_settings = function()
 		settings[CharConfig]['locked'] = false
 		save_settings()
 	end
+	if settings[CharConfig]['arrows'] == nil then
+		settings[CharConfig]['arrows'] = false
+		save_settings()
+	end
 	remindNPC = settings[CharConfig]['remindNPC']
 	doBeep = settings[CharConfig]['beep']
+	DoDrawArrow = settings[CharConfig]['arrows']
 	GUI_Main.Locked = settings[CharConfig]['locked']
 	doAlert = settings[CharConfig]['popup']
 	showAggro = settings[CharConfig]['aggro']
@@ -389,7 +394,7 @@ local function RefreshZone()
 		local spawn = npcs[i]
 		if #npcs>0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
 	end
-	for i = 1, 20 do
+	for i = 1, mq.TLO.Me.XTargetSlots() do
 		if mq.TLO.Me.XTarget(i)()~=nil and mq.TLO.Me.XTarget(i)() ~= 0 then
 			local spawn = mq.TLO.Me.XTarget(i)
 			if spawn.ID()>0 then InsertTableSpawn(xTarTable, spawn, tonumber(spawn.ID())) end
@@ -485,11 +490,11 @@ local function DrawToggles()
 	ImGui.SameLine()
 	-- Alert Popup Toggle Button
 	if doAlert then
-		ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
 		if ImGui.Button(Icons.MD_ALARM) then CMD('/am doalert') end
 		ImGui.PopStyleColor(1)
 		else
-		ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
 		if ImGui.Button(Icons.MD_ALARM_OFF) then CMD('/am doalert') end
 		ImGui.PopStyleColor(1)
 	end
@@ -501,11 +506,11 @@ local function DrawToggles()
 	ImGui.SameLine()
 	-- Beep Alert Toggle Button
 	if doBeep then
-		ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+		ImGui.PushStyleColor(ImGuiCol.Button,COLOR.color('btn_green')) -- Green for enabled
 		if ImGui.Button(Icons.FA_BELL_O) then CMD('/am beep') end
 		ImGui.PopStyleColor(1)
 		else
-		ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
 		if ImGui.Button(Icons.FA_BELL_SLASH_O) then CMD('/am beep') end
 		ImGui.PopStyleColor(1)
 	end
@@ -517,11 +522,11 @@ local function DrawToggles()
 	ImGui.SameLine()
 	-- Alert Window Toggle Button
 	if AlertWindowOpen then
-		ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
 		if ImGui.Button(Icons.MD_VISIBILITY) then CMD('/am popup') end
 		ImGui.PopStyleColor(1)
 		else
-		ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for inactive state
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for inactive state
 		if ImGui.Button(Icons.MD_VISIBILITY_OFF) then CMD('/am popup') end
 		ImGui.PopStyleColor(1)
 	end
@@ -555,12 +560,12 @@ local function DrawToggles()
 	ImGui.SameLine(ImGui.GetWindowWidth() - 120)
 	-- Arrow Status Toggle Button
 	if DoDrawArrow then
-		ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
-		if ImGui.Button(Icons.FA_ARROW_UP) then DoDrawArrow = false end
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
+		if ImGui.Button(Icons.FA_ARROW_UP) then DoDrawArrow, settings[CharConfig]['arrows'] = false, false save_settings() end
 		ImGui.PopStyleColor(1)
 		else
-		ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
-		if ImGui.Button(Icons.FA_ARROW_DOWN) then DoDrawArrow = true end
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
+		if ImGui.Button(Icons.FA_ARROW_DOWN) then DoDrawArrow, settings[CharConfig]['arrows'] = true,true save_settings() end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -571,11 +576,11 @@ local function DrawToggles()
 	ImGui.SameLine(ImGui.GetWindowWidth() - 90)
 	-- Aggro Status Toggle Button
 	if showAggro then
-		ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+		ImGui.PushStyleColor(ImGuiCol.Button,COLOR.color('btn_green')) -- Green for enabled
 		if ImGui.Button(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
 		ImGui.PopStyleColor(1)
 		else
-		ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
 		if ImGui.Button(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
 		ImGui.PopStyleColor(1)
 	end
@@ -587,11 +592,11 @@ local function DrawToggles()
 	ImGui.SameLine(ImGui.GetWindowWidth() - 60)
 	-- Alert Master Scanning Toggle Button
 	if active then
-		ImGui.PushStyleColor(ImGuiCol.Button, 0.4, 1.0, 0.4, 0.4) -- Green for enabled
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
 		if ImGui.Button(Icons.FA_HEARTBEAT) then CMD('/am off') end
 		ImGui.PopStyleColor(1)
 		else
-		ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for disabled
+		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
 		if ImGui.Button(Icons.MD_DO_NOT_DISTURB) then CMD('/am on') end
 		ImGui.PopStyleColor(1)
 	end
@@ -609,14 +614,14 @@ local function DrawToggles()
 		ImGui.Text(Icons.MD_HELP_OUTLINE)
 	end
 	if ImGui.IsItemHovered() then
-		ImGui.SetTooltip("Right-click the TitleBar or Main Window.\nTo toggle Tooltips.")
+		ImGui.SetTooltip("Right-Click.\nTo toggle Tooltips.")
 	end
 end
 local function DrawRuleRow(entry)
 	ImGui.TableNextColumn()
 	-- Add to Spawn List Button
 	if ImGui.SmallButton(Icons.FA_USER_PLUS) then CMD('/am spawnadd "'..entry.MobName..'"') end
-	if ImGui.IsItemHovered() then
+	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Add to Spawn List")
 		ImGui.EndTooltip()
@@ -624,15 +629,20 @@ local function DrawRuleRow(entry)
 	ImGui.TableNextColumn()
 	-- Mob Name
 	ImGui.Text('%s', entry.MobName)
-	if ImGui.IsItemHovered() then
+	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
-		ImGui.Text("Right-Click to Navigate")
+		ImGui.Text("Left-Click to Navigate\nRight-Click Group Nav")
 		ImGui.EndTooltip()
-		-- Right-click interaction uses the original spawnName
-		if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
-			CMD('/nav id "' .. entry.MobID .. '"')
-		end
 	end
+		-- Right-click interaction uses the original spawnName
+		if ImGui.IsItemHovered() then
+			if ImGui.IsMouseReleased(1) then
+				mq.cmdf("/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s",groupCmd,entry.MobID)
+			elseif
+				ImGui.IsMouseReleased(0) then
+				mq.cmdf('/nav id %s',entry.MobID)
+			end
+		end
 	ImGui.SameLine()
 	ImGui.TableNextColumn()
 	--Consider Color for Level Text
@@ -700,7 +710,7 @@ local function DrawSearchWindow()
 			currentTab = "zone"
 			RefreshZone()
 		end
-		if ImGui.IsItemHovered() then
+			if ImGui.IsItemHovered() and showTooltips then
 			ImGui.BeginTooltip()
 			ImGui.Text('Spawn Count: '..tostring(#Table_Cache.Unhandled))
 			ImGui.EndTooltip()
@@ -709,13 +719,13 @@ local function DrawSearchWindow()
 		local tabLabel = "NPC List"
 		if next(spawnAlerts) ~= nil then
 			tabLabel = Icons.FA_BULLHORN .. " NPC List " .. Icons.FA_BULLHORN
-			ImGui.PushStyleColor(ImGuiCol.Button, 1.0, 0.4, 0.4, 0.4) -- Red for inactive state
+			ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red'))
 			if ImGui.Button(tabLabel) then
 				currentTab = "npcList"
 			end
 			ImGui.PopStyleColor(1)
 			else
-			ImGui.PushStyleColor(ImGuiCol.Button, 0.2, 0.4, 0.8, 0.4) -- Red for inactive state
+			ImGui.PushStyleColor(ImGuiCol.Button, 0.2, 0.4, 0.8, 0.4)
 			if ImGui.Button(tabLabel) then
 				currentTab = "npcList"
 			end
@@ -817,6 +827,7 @@ local function DrawSearchWindow()
 			if next(sortedNpcs) ~= nil then
 				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
 					-- Set up table headers
+					ImGui.TableSetupScrollFreeze(0, 1)
 					ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 					ImGui.TableSetupColumn("Zone", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 					ImGui.TableSetupColumn(Icons.MD_DELETE)
@@ -838,12 +849,17 @@ local function DrawSearchWindow()
 							ImGui.PopStyleColor()
 							if ImGui.IsItemHovered() and showTooltips then
 								ImGui.BeginTooltip()
-								ImGui.Text("Green Names are up!\n Right-Click to Navigate to " .. displayName)
+								ImGui.Text("Green Names are up!\n Left-Click to Navigate to " .. displayName.."\n Right-Click to Group Navigate to " .. displayName)
 								ImGui.EndTooltip()
 							end
 							-- Right-click interaction uses the original spawnName
-							if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
-								CMD('/nav spawn "' .. spawnName .. '"')
+							if ImGui.IsItemHovered() then
+								if ImGui.IsMouseReleased(1) then
+									mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav spawn "%s"',groupCmd,spawnName)
+								elseif
+									ImGui.IsMouseReleased(0) then
+									mq.cmdf('/nav spawn "%s"',spawnName)
+								end
 							end
 						end
 						ImGui.TableNextColumn()
@@ -874,6 +890,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
 		if ImGui.BeginTable("AlertTable", 3,spawnListFlags) then
+			ImGui.TableSetupScrollFreeze(0, 1)
 			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
 			ImGui.TableSetupColumn("Distance", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
 			ImGui.TableSetupColumn("Direction", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
@@ -887,12 +904,17 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 				ImGui.PopStyleColor(1)
 				if ImGui.IsItemHovered() and showTooltips then
 					ImGui.BeginTooltip()
-					ImGui.Text("Right-Click to Navigate: "..spawnData.DisplayName())
+					ImGui.Text("Left-Click to Navigate: "..spawnData.DisplayName().."\nRight-Click to Group Navigate: "..spawnData.DisplayName())
 					ImGui.EndTooltip()
-					if ImGui.IsItemHovered() and ImGui.IsMouseReleased(1) then
-						CMD('/nav id "' .. spawnData.ID() .. '"')
-					end
 				end
+					if ImGui.IsItemHovered() then
+						if ImGui.IsMouseReleased(1) then
+							mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s',groupCmd,spawnData.ID())
+						elseif
+							ImGui.IsMouseReleased(0) then
+							mq.cmdf('/nav id %s',spawnData.ID())
+						end
+					end
 				ImGui.TableSetColumnIndex(1)
 				local distance = math.floor(spawnData.Distance() or 0)
 				ImGui.PushStyleColor(ImGuiCol.Text,ColorDistance(distance))
@@ -1297,6 +1319,7 @@ local setup = function()
 	active = true
 	radius = arg[1] or 200
 	zradius = arg[2] or 100
+	if mq.TLO.Plugin('mq2eqbc').IsLoaded() then groupCmd = '/bcaa /' end
 	load_settings()
 	load_binds()
 	mq.imgui.init("Alert_Master", DrawAlertGUI)
