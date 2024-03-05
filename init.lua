@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '1.84'
+local amVer = '1.86'
 local CMD = mq.cmd
 local TLO = mq.TLO
 local Me = TLO.Me
