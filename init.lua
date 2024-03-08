@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '1.86'
+local amVer = '1.87'
 local CMD = mq.cmd
 local TLO = mq.TLO
 local Me = TLO.Me
@@ -189,46 +189,27 @@ local load_settings = function()
 	gms = settings[CharConfig]['gms']
 	announce = settings[CharConfig]['announce']
 	ignoreguild = settings[CharConfig]['ignoreguild']
-	if settings[CharConfig]['beep'] == nil then
-		settings[CharConfig]['beep'] = false
-		save_settings()
-	end
-	if settings[CharConfig]['aggro'] == nil then
-		settings[CharConfig]['aggro'] = false
-		save_settings()
-	end
-	if settings[CharConfig]['remindNPC'] == nil then
-		settings[CharConfig]['remindNPC'] = 5
-		save_settings()
-	end
-	if settings[CharConfig]['popup'] == nil then
-		settings[CharConfig]['popup'] = false
-		save_settings()
-	end
-	if settings[CharConfig]['distmid'] == nil then
-		settings[CharConfig]['distmid'] = 600
-		save_settings()
-	end
-	if settings[CharConfig]['distfar'] == nil then
-		settings[CharConfig]['distfar'] = 1200
-		save_settings()
-	end
-	if settings[CharConfig]['locked'] == nil then
-		settings[CharConfig]['locked'] = false
-		save_settings()
-	end
-	if settings[CharConfig]['arrows'] == nil then
-		settings[CharConfig]['arrows'] = false
-		save_settings()
-	end
-	remindNPC = settings[CharConfig]['remindNPC']
-	doBeep = settings[CharConfig]['beep']
-	DoDrawArrow = settings[CharConfig]['arrows']
-	GUI_Main.Locked = settings[CharConfig]['locked']
-	doAlert = settings[CharConfig]['popup']
-	showAggro = settings[CharConfig]['aggro']
-	DistColorRanges.orange = settings[CharConfig]['distmid']
-	DistColorRanges.red = settings[CharConfig]['distfar']
+	radius = settings[CharConfig]['radius'] or radius
+	settings[CharConfig]['radius'] = radius
+	zradius = settings[CharConfig]['zradius'] or zradius
+	settings[CharConfig]['zradius'] = zradius
+	remindNPC = settings[CharConfig]['remindNPC'] or 5
+	settings[CharConfig]['remindNPC'] = remindNPC
+	doBeep = settings[CharConfig]['beep'] or false
+	settings[CharConfig]['beep'] = doBeep
+	DoDrawArrow = settings[CharConfig]['arrows'] or false
+	settings[CharConfig]['arrows'] = DoDrawArrow
+	GUI_Main.Locked = settings[CharConfig]['locked'] or false
+	settings[CharConfig]['locked'] = GUI_Main.Locked
+	doAlert = settings[CharConfig]['popup'] or false
+	settings[CharConfig]['popup'] = doAlert
+	showAggro = settings[CharConfig]['aggro'] or false
+	settings[CharConfig]['aggro'] = showAggro
+	DistColorRanges.orange = settings[CharConfig]['distmid'] or 600
+	settings[CharConfig]['distmid'] = DistColorRanges.orange
+	DistColorRanges.red = settings[CharConfig]['distfar'] or 1200
+	settings[CharConfig]['distfar'] = DistColorRanges.red
+	save_settings()
 	if GUI_Main.Locked then
 		SearchWindow_Show = true
 		SearchWindowOpen = true
@@ -615,6 +596,7 @@ local function DrawToggles()
 	end
 	if ImGui.IsItemHovered() then
 		ImGui.SetTooltip("Right-Click.\nTo toggle Tooltips.")
+		if ImGui.IsMouseReleased(0) or ImGui.IsMouseReleased(1) then showTooltips = not showTooltips end
 	end
 end
 local function DrawRuleRow(entry)
@@ -690,10 +672,6 @@ local function DrawSearchWindow()
 		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		if mq.TLO.Me.Zoning() then return end
 		SearchWindowOpen = ImGui.Begin("Alert Master", SearchWindowOpen, GUI_Main.Flags)
-		-- Check for right-click on the title bar to toggle tooltip visibility
-		if ImGui.IsWindowHovered(ImGuiHoveredFlags.TitleBar) and ImGui.IsMouseClicked(ImGuiMouseButton.Right) then
-			showTooltips = not showTooltips
-		end
 		--   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
 		if #Table_Cache.Unhandled > 0 then
 			ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.3, 0.3, 1))
@@ -936,9 +914,6 @@ function DrawAlertGUI() -- Draw GUI Window
 		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		if mq.TLO.Me.Zoning() then return end
 		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
-		if ImGui.IsWindowHovered(ImGuiHoveredFlags.TitleBar) and ImGui.IsMouseClicked(ImGuiMouseButton.Right) then
-			showTooltips = not showTooltips
-		end
 		if not opened then
 			AlertWindowOpen = false
 			AlertWindow_Show = false
@@ -1584,4 +1559,4 @@ local loop = function()
 	end
 end
 setup()
-loop()																																			
+loop()
