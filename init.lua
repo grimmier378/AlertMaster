@@ -54,6 +54,13 @@ local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, sh
 local currentTab = "zone"
 local newSpawnName = ''
 local zSettings = false
+local theme = require('themes/themes')
+local useThemeName = 'Default'
+local ColorCount = 0
+local openConfigGUI = false
+
+-- local a = mq.moduleDir
+
 ---@class
 local DistColorRanges = {
 	orange = 600, -- distance the color changes from green to orange
@@ -120,12 +127,12 @@ local GUI_Main = {
 		Flags = bit32.bor(
 			ImGuiTableFlags.Resizable,
 			ImGuiTableFlags.Sortable,
-			ImGuiTableFlags.RowBg,
+			--ImGuiTableFlags.RowBg,
 			--ImGuiTableFlags.NoKeepColumnsVisible,
-			ImGuiTableFlags.SizingFixedFit,
+			--ImGuiTableFlags.SizingFixedFit,
 			-- ImGuiTableFlags.MultiSortable, -- MultiSort seems to not work at all.
-			ImGuiTableFlags.BordersV,
-			ImGuiTableFlags.BordersOuter,
+			ImGuiTableFlags.NoBordersInBodyUntilResize,
+			--ImGuiTableFlags.BordersOuter,
 			ImGuiTableFlags.Reorderable,
 			ImGuiTableFlags.ScrollY,
 			ImGuiTableFlags.ScrollX,
@@ -182,6 +189,8 @@ local load_settings = function()
 	if settings[CharConfig] == nil then settings[CharConfig] = defaultConfig end
 	if settings[CharCommands] == nil then settings[CharCommands] = {} end
 	if settings['SafeZones'] == nil then settings['SafeZones'] = {} end
+	useThemeName = settings[CharConfig]['theme'] or 'Default'
+	settings[CharConfig]['theme'] = useThemeName
 	delay = settings[CharConfig]['delay']
 	remind = settings[CharConfig]['remind']
 	pcs = settings[CharConfig]['pcs']
@@ -209,6 +218,7 @@ local load_settings = function()
 	settings[CharConfig]['distmid'] = DistColorRanges.orange
 	DistColorRanges.red = settings[CharConfig]['distfar'] or 1200
 	settings[CharConfig]['distfar'] = DistColorRanges.red
+
 	save_settings()
 	if GUI_Main.Locked then
 		SearchWindow_Show = true
@@ -469,6 +479,17 @@ local function DrawToggles()
 		ImGui.EndTooltip()
 	end
 	ImGui.SameLine()
+	local gIcon = Icons.MD_SETTINGS
+	if ImGui.Button(gIcon) then
+		openConfigGUI = not openConfigGUI
+		--mq.pickle(themeFile, theme)
+	end
+	if ImGui.IsItemHovered() and showTooltips then
+		ImGui.BeginTooltip()
+		ImGui.Text("Config")
+		ImGui.EndTooltip()
+	end
+	ImGui.SameLine()
 	-- Alert Popup Toggle Button
 	if doAlert then
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
@@ -662,7 +683,9 @@ local function DrawRuleRow(entry)
 	ImGui.SetWindowFontScale(1)
 	ImGui.TableNextColumn()
 end
+
 local function DrawSearchWindow()
+	if mq.TLO.Me.Zoning() then return end
 	if GUI_Main.Locked then
 		GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
 		else
@@ -670,27 +693,31 @@ local function DrawSearchWindow()
 	end
 	if SearchWindowOpen then
 		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
-		if mq.TLO.Me.Zoning() then return end
-		SearchWindowOpen = ImGui.Begin("Alert Master", SearchWindowOpen, GUI_Main.Flags)
-		--   ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 2, 2)
-		if #Table_Cache.Unhandled > 0 then
-			ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.3, 0.3, 1))
-			ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImVec4(1, 0.4, 0.4, 1))
-			ImGui.PushStyleColor(ImGuiCol.ButtonActive, ImVec4(1, 0.5, 0.5, 1))
+		ColorCount = 0
+		for tID, tData in pairs(theme.Theme) do
+			if tData.Name == useThemeName then
+				for pID, cData in pairs(theme.Theme[tID].Color) do
+					ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
+					ColorCount = ColorCount +1
+
+				end
+			end
 		end
-		if #Table_Cache.Unhandled > 0 then ImGui.PopStyleColor(3) end
+
+		SearchWindowOpen = ImGui.Begin("Alert Master", SearchWindowOpen, GUI_Main.Flags)
+
 		ImGui.SameLine()
 		DrawToggles()
 		--ImGui.SameLine()
 		ImGui.Separator()
 		-- next row
-		if ImGui.Button(Zone.Name()) then
+		if ImGui.Button(Zone.Name(), 160,22) then
 			currentTab = "zone"
 			RefreshZone()
 		end
-			if ImGui.IsItemHovered() and showTooltips then
+		if ImGui.IsItemHovered() and showTooltips then
 			ImGui.BeginTooltip()
-			ImGui.Text('Spawn Count: '..tostring(#Table_Cache.Unhandled))
+			ImGui.Text("Zone Short Name: %s\nSpawn Count: %s",Zone.ShortName(),tostring(#Table_Cache.Unhandled))
 			ImGui.EndTooltip()
 		end
 		ImGui.SameLine()
@@ -861,9 +888,57 @@ local function DrawSearchWindow()
 			end
 		end
 		ImGui.PopStyleVar(1)
+		if ColorCount > 0 then ImGui.PopStyleColor(ColorCount) end
 		ImGui.End()
+
 	end
 end
+local ColorCountConf = 0
+function Config_GUI(open)
+	if not openConfigGUI then return end
+	ColorCountConf = 0
+	local themeName = theme.LoadTheme or 'notheme'
+	-- Push Theme Colors
+		for tID, tData in pairs(theme.Theme) do
+			if tData.Name == themeName then
+				for pID, cData in pairs(theme.Theme[tID].Color) do
+					ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
+					ColorCountConf = ColorCountConf +1
+				end
+			end
+		end
+
+	open, openConfigGUI = ImGui.Begin("config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.NoCollapse))
+	if not openConfigGUI then
+		openConfigGUI = false
+		open = false
+		if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
+		ImGui.End()
+		return open
+	end
+	ImGui.SameLine()
+
+	ImGui.Text("Cur Theme: %s", themeName)
+	-- Combo Box Load Theme
+	if ImGui.BeginCombo("Load Theme", themeName) then
+		for k, data in pairs(theme.Theme) do
+			local isSelected = data.Name == themeName
+			if ImGui.Selectable(data.Name, isSelected) then
+				theme.LoadTheme = data.Name
+				themeName = theme.LoadTheme
+				useThemeName = themeName
+				settings[CharConfig]['theme'] = useThemeName
+				save_settings()
+			end
+		end
+		ImGui.EndCombo()
+	end
+
+	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
+
+	ImGui.End()
+end
+local ColorCountAlert = 0
 local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
@@ -911,12 +986,25 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 end
 function DrawAlertGUI() -- Draw GUI Window
 	if AlertWindowOpen then
-		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
+		local opened = false
+		ColorCountAlert = 0
 		if mq.TLO.Me.Zoning() then return end
+		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
+		for tID, tData in pairs(theme.Theme) do
+			if tData.Name == useThemeName then
+				for pID, cData in pairs(theme.Theme[tID].Color) do
+					ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
+					ColorCountAlert = ColorCountAlert +1
+				end
+			end
+		end
 		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
 		if not opened then
 			AlertWindowOpen = false
 			AlertWindow_Show = false
+			ImGui.PopStyleColor(ColorCountAlert)
+			ImGui.PopStyleVar(1)
+			ImGui.End()
 			if remindNPC > 0 then
 				alertTime = os.time()
 				else
@@ -926,6 +1014,7 @@ function DrawAlertGUI() -- Draw GUI Window
 			BuildAlertRows()
 		end
 		ImGui.PopStyleVar(1)
+		ImGui.PopStyleColor(ColorCountAlert)
 		ImGui.End()
 	end
 end
@@ -1298,6 +1387,7 @@ local setup = function()
 	load_settings()
 	load_binds()
 	mq.imgui.init("Alert_Master", DrawAlertGUI)
+	mq.imgui.init('config', Config_GUI)
 	-- Kickstart the data
 	GUI_Main.Refresh.Table.Rules = true
 	GUI_Main.Refresh.Table.Filtered = true
@@ -1509,6 +1599,7 @@ local check_for_zone_change = function()
 end
 local loop = function()
 	while true do
+		if TLO.Window('CharacterListWnd').Open() then return false end
 		check_for_zone_change()
 		check_for_spawns() -- always refresh spawn list and only alert if not a safe zone.(checked later in the function)
 		if check_safe_zone() ~= true then
@@ -1522,7 +1613,7 @@ local loop = function()
 				SearchWindow_Show = false
 				zSettings = true
 			end
-			else
+		else
 			if zSettings then
 				RefreshZone()
 				SearchWindow_Show = true
