@@ -58,6 +58,7 @@ local theme = require('themes/themes')
 local useThemeName = 'Default'
 local ColorCount = 0
 local openConfigGUI = false
+local themeFile = mq.configDir .. '/MyThemeZ.lua'
 
 -- local a = mq.moduleDir
 
@@ -151,6 +152,15 @@ local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw]
 local GetCharZone = function()
 	return '\aw[\ao'..Me.DisplayName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
 end
+
+---comment Check to see if the file we want to work on exists.
+---@param name string -- Full Path to file
+---@return boolean -- returns true if the file exists and false otherwise
+function File_Exists(name)
+	local f=io.open(name,"r")
+	if f~=nil then io.close(f) return true else return false end
+end
+
 local print_ts = function(msg) print(MsgPrefix()..msg) end
 local function print_status()
 	print_ts('\ayAlert Status: '..tostring(active and 'on' or 'off'))
@@ -175,7 +185,8 @@ local load_settings = function()
 	config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
 	settings_file = '/config/AlertMaster.ini'
 	settings_path = config_dir..settings_file
-	if file_exists(settings_path) then
+
+	if File_Exists(settings_path) then
 		settings = LIP.load(settings_path)
 		else
 		settings = {
@@ -184,6 +195,9 @@ local load_settings = function()
 			Ignore = {}
 		}
 		save_settings()
+	end
+	if File_Exists(themeFile) then
+		theme = dofile(themeFile)
 	end
 	-- if this character doesn't have the sections in the ini, create them
 	if settings[CharConfig] == nil then settings[CharConfig] = defaultConfig end
