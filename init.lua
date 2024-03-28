@@ -59,8 +59,7 @@ local useThemeName = 'Default'
 local ColorCount = 0
 local openConfigGUI = false
 local themeFile = mq.configDir .. '/MyThemeZ.lua'
-
--- local a = mq.moduleDir
+local ZoomLvl = 1.0
 
 ---@class
 local DistColorRanges = {
@@ -205,6 +204,8 @@ local load_settings = function()
 	if settings['SafeZones'] == nil then settings['SafeZones'] = {} end
 	useThemeName = settings[CharConfig]['theme'] or 'Default'
 	settings[CharConfig]['theme'] = useThemeName
+	ZoomLvl = settings[CharConfig]['ZoomLvl'] or 1.0
+	settings[CharConfig]['ZoomLvl'] = ZoomLvl
 	delay = settings[CharConfig]['delay']
 	remind = settings[CharConfig]['remind']
 	pcs = settings[CharConfig]['pcs']
@@ -256,7 +257,7 @@ local function ColorDistance(distance)
 		return COLOR.color('red')
 	end
 end
-function isSpawnInAlerts(spawnName, spawnAlerts)
+local function isSpawnInAlerts(spawnName, spawnAlerts)
 	for _, spawnData in pairs(spawnAlerts) do
 		if spawnData.DisplayName() == spawnName or spawnData.Name() == spawnName then
 			return true
@@ -496,6 +497,7 @@ local function DrawToggles()
 	local gIcon = Icons.MD_SETTINGS
 	if ImGui.Button(gIcon) then
 		openConfigGUI = not openConfigGUI
+		save_settings()
 		--mq.pickle(themeFile, theme)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -719,8 +721,7 @@ local function DrawSearchWindow()
 		end
 
 		SearchWindowOpen = ImGui.Begin("Alert Master", SearchWindowOpen, GUI_Main.Flags)
-
-		ImGui.SameLine()
+		ImGui.SetWindowFontScale(ZoomLvl)
 		DrawToggles()
 		--ImGui.SameLine()
 		ImGui.Separator()
@@ -903,6 +904,7 @@ local function DrawSearchWindow()
 		end
 		ImGui.PopStyleVar(1)
 		if ColorCount > 0 then ImGui.PopStyleColor(ColorCount) end
+		ImGui.SetWindowFontScale(1)
 		ImGui.End()
 
 	end
@@ -923,10 +925,12 @@ function Config_GUI(open)
 		end
 
 	open, openConfigGUI = ImGui.Begin("config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.NoCollapse))
+	ImGui.SetWindowFontScale(ZoomLvl)
 	if not openConfigGUI then
 		openConfigGUI = false
 		open = false
 		if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
+		ImGui.SetWindowFontScale(1)
 		ImGui.End()
 		return open
 	end
@@ -935,6 +939,7 @@ function Config_GUI(open)
 	ImGui.Text("Cur Theme: %s", themeName)
 	-- Combo Box Load Theme
 	if ImGui.BeginCombo("Load Theme", themeName) then
+		ImGui.SetWindowFontScale(ZoomLvl)
 		for k, data in pairs(theme.Theme) do
 			local isSelected = data.Name == themeName
 			if ImGui.Selectable(data.Name, isSelected) then
@@ -948,9 +953,20 @@ function Config_GUI(open)
 		ImGui.EndCombo()
 	end
 
-	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
+	-- Slider for adjusting zoom level
+	local tmpZoom = ZoomLvl
+	if ZoomLvl then
+		tmpZoom = ImGui.SliderFloat("Zoom Level", tmpZoom, 0.5, 2.0)
+	end
+	if ZoomLvl ~= tmpZoom then
+		ZoomLvl = tmpZoom
+		settings[CharConfig]['ZoomLvl'] = ZoomLvl
+	end
 
+	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
+	ImGui.SetWindowFontScale(1)
 	ImGui.End()
+
 end
 local ColorCountAlert = 0
 local function BuildAlertRows() -- Build the Button Rows for the GUI Window
@@ -1025,10 +1041,12 @@ function DrawAlertGUI() -- Draw GUI Window
 				spawnAlerts = {}
 			end
 			else
+			ImGui.SetWindowFontScale(ZoomLvl)
 			BuildAlertRows()
 		end
 		ImGui.PopStyleVar(1)
 		ImGui.PopStyleColor(ColorCountAlert)
+		ImGui.SetWindowFontScale(1)
 		ImGui.End()
 	end
 end
