@@ -56,21 +56,23 @@ local newSpawnName = ''
 local zSettings = false
 local theme = require('themes/themes')
 local useThemeName = 'Default'
-local ColorCount = 0
 local openConfigGUI = false
 local themeFile = mq.configDir .. '/MyThemeZ.lua'
 local ZoomLvl = 1.0
+local ColorCountAlert, ColorCountConf, ColorCount = 0, 0, 0
 
 ---@class
 local DistColorRanges = {
 	orange = 600, -- distance the color changes from green to orange
 	red = 1200, -- distance the color changes from orange to red
 }
+
 local Table_Cache = {
 	Rules = {},
 	Unhandled = {},
 	Mobs = {},
 }
+
 local xTarTable = {}
 local alertFlags = bit32.bor(ImGuiWindowFlags.NoCollapse)
 local spawnListFlags = bit32.bor(
@@ -84,6 +86,7 @@ local spawnListFlags = bit32.bor(
 	ImGuiTableFlags.ScrollX,
 	ImGuiTableFlags.Hideable
 )
+
 local GUI_Main = {
 	Open  = false,
 	Show  = false,
@@ -146,8 +149,10 @@ local GUI_Main = {
 		},
 	},
 }
+
 -- helpers
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
+
 local GetCharZone = function()
 	return '\aw[\ao'..Me.DisplayName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
 end
@@ -161,6 +166,7 @@ function File_Exists(name)
 end
 
 local print_ts = function(msg) print(MsgPrefix()..msg) end
+
 local function print_status()
 	print_ts('\ayAlert Status: '..tostring(active and 'on' or 'off'))
 	print_ts('\a-tPCs: \a-y'..tostring(pcs)..'\ax radius: \a-y'..tostring(radius)..'\ax zradius: \a-y'..tostring(zradius)..'\ax delay: \a-y'..tostring(delay)..'s\ax remind: \a-y'..tostring(remind)..' seconds\ax')
@@ -174,12 +180,15 @@ local function print_status()
 	print_ts('\a-tPopup Alerts: \a-y'..tostring(doAlert)..'\ax')
 	print_ts('\a-tBeep: \a-y'..tostring(doBeep)..'\ax')
 end
+
 local save_settings = function()
 	LIP.save(settings_path, settings)
 end
+
 local check_safe_zone = function()
 	return tSafeZones[Zone.ShortName():lower()]
 end
+
 local load_settings = function()
 	config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
 	settings_file = '/config/AlertMaster.ini'
@@ -198,6 +207,7 @@ local load_settings = function()
 	if File_Exists(themeFile) then
 		theme = dofile(themeFile)
 	end
+	useThemeName = theme.LoadTheme
 	-- if this character doesn't have the sections in the ini, create them
 	if settings[CharConfig] == nil then settings[CharConfig] = defaultConfig end
 	if settings[CharCommands] == nil then settings[CharCommands] = {} end
@@ -245,6 +255,7 @@ local load_settings = function()
 	-- setup safe zone "set"
 	for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
+
 local function ColorDistance(distance)
 	if distance < DistColorRanges.orange then
 		-- Green color for Close Range
@@ -257,6 +268,7 @@ local function ColorDistance(distance)
 		return COLOR.color('red')
 	end
 end
+
 local function isSpawnInAlerts(spawnName, spawnAlerts)
 	for _, spawnData in pairs(spawnAlerts) do
 		if spawnData.DisplayName() == spawnName or spawnData.Name() == spawnName then
@@ -265,6 +277,7 @@ local function isSpawnInAlerts(spawnName, spawnAlerts)
 	end
 	return false
 end
+
 ---@param spawn MQSpawn
 local function SpawnToEntry(spawn, id, table)
 	local pAggro = 0
@@ -291,6 +304,7 @@ local function SpawnToEntry(spawn, id, table)
 		return
 	end
 end
+
 ---@param spawn MQSpawn
 local function InsertTableSpawn(dataTable, spawn, id, opts)
 	if spawn then
@@ -303,6 +317,7 @@ local function InsertTableSpawn(dataTable, spawn, id, opts)
 		table.insert(dataTable, entry)
 	end
 end
+
 local function TableSortSpecs(a, b)
 	for i = 1, GUI_Main.Table.SortSpecs.SpecsCount do
 		local spec = GUI_Main.Table.SortSpecs:Specs(i)
@@ -374,6 +389,7 @@ local function TableSortSpecs(a, b)
 	end
 	return a.MobName < b.MobName
 end
+
 local function RefreshUnhandled()
 	local splitSearch = {}
 	for part in string.gmatch(GUI_Main.Search, '[^%s]+') do
@@ -392,6 +408,7 @@ local function RefreshUnhandled()
 	GUI_Main.Refresh.Sort.Rules = true
 	GUI_Main.Refresh.Table.Unhandled = true
 end
+
 local function RefreshZone()
 	local newTable = {}
 	xTarTable = {}
@@ -424,7 +441,9 @@ local function RefreshZone()
 	GUI_Main.Refresh.Sort.Mobs = true
 	GUI_Main.Refresh.Table.Mobs = false
 end
+
 -----------------------
+
 local function directions(heading)
 	-- convert headings from letter values to degrees
 	local dirToDeg = {
@@ -447,6 +466,7 @@ local function directions(heading)
 	}
 	return dirToDeg[heading] or 0 -- Returns the degree value for the given direction, defaulting to 0 if not found
 end
+
 -- Tighter relative direction code for when I make better arrows.
 local function getRelativeDirection(spawnDir)
 	local meHeading = directions(mq.TLO.Me.Heading())
@@ -455,6 +475,7 @@ local function getRelativeDirection(spawnDir)
 	difference = (difference + 360) % 360
 	return difference
 end
+
 function RotatePoint(p, cx, cy, angle)
 	local radians = math.rad(angle)
 	local cosA = math.cos(radians)
@@ -463,6 +484,7 @@ function RotatePoint(p, cx, cy, angle)
 	local newY = sinA * (p.x - cx) + cosA * (p.y - cy) + cy
 	return ImVec2(newX, newY)
 end
+
 function DrawArrow(topPoint, width, height, color)
 	local draw_list = ImGui.GetWindowDrawList()
 	local p1 = ImVec2(topPoint.x, topPoint.y)
@@ -478,7 +500,25 @@ function DrawArrow(topPoint, width, height, color)
 	p3 = RotatePoint(p3, center_x, center_y, angle)
 	draw_list:AddTriangleFilled(p1, p2, p3, ImGui.GetColorU32(color))
 end
+
 ----------------------------
+---comment
+---@param counter integer -- the counter used for this window to keep track of color changes
+---@param themeName string -- name of the theme to load form table
+---@return integer -- returns the new counter value 
+local function DrawTheme(counter, themeName)
+	-- Push Theme Colors
+	for tID, tData in pairs(theme.Theme) do
+		if tData.Name == themeName then
+			for pID, cData in pairs(theme.Theme[tID].Color) do
+				ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
+				counter = counter +1
+			end
+		end
+	end
+	return counter
+end
+
 local function DrawToggles()
 	local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
 	Icons.FA_UNLOCK .. '##lockTablButton'
@@ -636,6 +676,7 @@ local function DrawToggles()
 		if ImGui.IsMouseReleased(0) or ImGui.IsMouseReleased(1) then showTooltips = not showTooltips end
 	end
 end
+
 local function DrawRuleRow(entry)
 	ImGui.TableNextColumn()
 	-- Add to Spawn List Button
@@ -710,15 +751,7 @@ local function DrawSearchWindow()
 	if SearchWindowOpen then
 		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		ColorCount = 0
-		for tID, tData in pairs(theme.Theme) do
-			if tData.Name == useThemeName then
-				for pID, cData in pairs(theme.Theme[tID].Color) do
-					ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
-					ColorCount = ColorCount +1
-
-				end
-			end
-		end
+		ColorCount = DrawTheme(ColorCount, useThemeName)
 
 		SearchWindowOpen = ImGui.Begin("Alert Master", SearchWindowOpen, GUI_Main.Flags)
 		ImGui.SetWindowFontScale(ZoomLvl)
@@ -909,22 +942,14 @@ local function DrawSearchWindow()
 
 	end
 end
-local ColorCountConf = 0
-function Config_GUI(open)
+
+local function Config_GUI(open)
 	if not openConfigGUI then return end
 	ColorCountConf = 0
-	local themeName = theme.LoadTheme or 'notheme'
-	-- Push Theme Colors
-		for tID, tData in pairs(theme.Theme) do
-			if tData.Name == themeName then
-				for pID, cData in pairs(theme.Theme[tID].Color) do
-					ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
-					ColorCountConf = ColorCountConf +1
-				end
-			end
-		end
+	-- local themeName = theme.LoadTheme or 'notheme'
+	ColorCountConf = DrawTheme(ColorCountConf, useThemeName)
 
-	open, openConfigGUI = ImGui.Begin("config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.NoCollapse))
+	open, openConfigGUI = ImGui.Begin("Alert master Config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoCollapse))
 	ImGui.SetWindowFontScale(ZoomLvl)
 	if not openConfigGUI then
 		openConfigGUI = false
@@ -963,12 +988,16 @@ function Config_GUI(open)
 		settings[CharConfig]['ZoomLvl'] = ZoomLvl
 	end
 
+	if ImGui.Button('close') then
+		openConfigGUI = false
+	end
+
 	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
 	ImGui.SetWindowFontScale(1)
 	ImGui.End()
 
 end
-local ColorCountAlert = 0
+
 local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
@@ -1014,20 +1043,14 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 		end
 	end
 end
+
 function DrawAlertGUI() -- Draw GUI Window
 	if AlertWindowOpen then
 		local opened = false
 		ColorCountAlert = 0
 		if mq.TLO.Me.Zoning() then return end
 		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
-		for tID, tData in pairs(theme.Theme) do
-			if tData.Name == useThemeName then
-				for pID, cData in pairs(theme.Theme[tID].Color) do
-					ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
-					ColorCountAlert = ColorCountAlert +1
-				end
-			end
-		end
+		ColorCountAlert = DrawTheme(ColorCountAlert, useThemeName)
 		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
 		if not opened then
 			AlertWindowOpen = false
@@ -1050,10 +1073,12 @@ function DrawAlertGUI() -- Draw GUI Window
 		ImGui.End()
 	end
 end
+
 local function DrawSearchGUI()
 	--RefreshZone() -- shouldn't need this since we are refreshing every delay anyway.
 	DrawSearchWindow()
 end
+
 local load_binds = function()
 	local bind_alertmaster = function(cmd, val)
 		local zone = Zone.ShortName():lower()
@@ -1411,6 +1436,7 @@ local load_binds = function()
 	mq.bind('/alertmaster', bind_alertmaster)
 	mq.bind('/am', bind_alertmaster)
 end
+
 local setup = function()
 	active = true
 	radius = arg[1] or 200
@@ -1431,6 +1457,7 @@ local setup = function()
 	print_status()
 	RefreshZone()
 end
+
 ---@param spawn MQSpawn
 local should_include_player = function(spawn)
 	local name = spawn.DisplayName()
@@ -1448,11 +1475,13 @@ local should_include_player = function(spawn)
 	if in_group or in_raid or in_guild then return false end
 	return true
 end
+
 local run_char_commands = function()
 	if settings[CharCommands] ~= nil then
 		for k, cmd in pairs(settings[CharCommands]) do CMD.docommand(cmd) end
 	end
 end
+
 local spawn_search_players = function(search)
 	local tmp = {}
 	local cnt = SpawnCount(search)()
@@ -1475,6 +1504,7 @@ local spawn_search_players = function(search)
 	end
 	return tmp
 end
+
 local spawn_search_npcs = function()
 	local tmp = {}
 	local spawns = settings[Zone.ShortName()]
@@ -1496,6 +1526,7 @@ local spawn_search_npcs = function()
 	end
 	return tmp
 end
+
 local check_for_gms = function()
 	if active and gms then
 		local tmp = spawn_search_players('gm')
@@ -1520,6 +1551,7 @@ local check_for_gms = function()
 		end
 	end
 end
+
 local check_for_pcs = function()
 	if active and pcs then
 		local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..Me.ID())
@@ -1547,6 +1579,7 @@ local check_for_pcs = function()
 		end
 	end
 end
+
 local check_for_spawns = function()
 	if active and spawns then
 		local tmp = spawn_search_npcs()
@@ -1598,6 +1631,7 @@ local check_for_spawns = function()
 		end
 	end
 end
+
 local check_for_announce = function()
 	if active and announce then
 		local tmp = spawn_search_players('pc notid '..Me.ID())
@@ -1620,6 +1654,7 @@ local check_for_announce = function()
 		end
 	end
 end
+
 local check_for_zone_change = function()
 	-- if we've changed zones, clear the tables and update current zone id
 	if active and (zone_id == nil or zone_id ~= Zone.ID()) then
@@ -1629,6 +1664,7 @@ local check_for_zone_change = function()
 		alertTime = os.time()
 	end
 end
+
 local loop = function()
 	while true do
 		if TLO.Window('CharacterListWnd').Open() then return false end
@@ -1681,5 +1717,6 @@ local loop = function()
 		mq.delay(delay..'s')
 	end
 end
+
 setup()
 loop()
