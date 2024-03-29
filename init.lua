@@ -753,7 +753,8 @@ local function DrawSearchWindow()
 		ColorCount = 0
 		ColorCount = DrawTheme(ColorCount, useThemeName)
 
-		SearchWindowOpen = ImGui.Begin("Alert Master", SearchWindowOpen, GUI_Main.Flags)
+		SearchWindowOpen = ImGui.Begin("Alert Master##"..mq.TLO.Me.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
+		ImGui.BeginGroup()
 		ImGui.SetWindowFontScale(ZoomLvl)
 		DrawToggles()
 		--ImGui.SameLine()
@@ -938,6 +939,10 @@ local function DrawSearchWindow()
 		ImGui.PopStyleVar(1)
 		if ColorCount > 0 then ImGui.PopStyleColor(ColorCount) end
 		ImGui.SetWindowFontScale(1)
+		ImGui.EndGroup()
+		if ImGui.IsItemHovered() then
+			ImGui.SetWindowFocus("Alert Master##"..mq.TLO.Me.DisplayName())
+		end
 		ImGui.End()
 
 	end
