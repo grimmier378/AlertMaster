@@ -972,16 +972,15 @@ local function Config_GUI(open)
 	end
 	ImGui.SameLine()
 
-	ImGui.Text("Cur Theme: %s", themeName)
+	ImGui.Text("Cur Theme: %s", useThemeName)
 	-- Combo Box Load Theme
-	if ImGui.BeginCombo("Load Theme", themeName) then
+	if ImGui.BeginCombo("Load Theme", useThemeName) then
 		ImGui.SetWindowFontScale(ZoomLvl)
 		for k, data in pairs(theme.Theme) do
-			local isSelected = data.Name == themeName
+			local isSelected = data.Name == useThemeName
 			if ImGui.Selectable(data.Name, isSelected) then
 				theme.LoadTheme = data.Name
-				themeName = theme.LoadTheme
-				useThemeName = themeName
+				useThemeName = theme.LoadTheme
 				settings[CharConfig]['theme'] = useThemeName
 				save_settings()
 			end
@@ -1001,6 +1000,9 @@ local function Config_GUI(open)
 
 	if ImGui.Button('close') then
 		openConfigGUI = false
+		settings[CharConfig]['theme'] = useThemeName
+		settings[CharConfig]['ZoomLvl'] = ZoomLvl
+		save_settings()
 	end
 
 	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
