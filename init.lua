@@ -949,6 +949,7 @@ local function DrawSearchWindow()
 		if ImGui.IsWindowHovered() then
 			ImGui.SetWindowFocus("Alert Master##"..mq.TLO.Me.DisplayName())
 		end
+		ImGui.SetWindowFontScale(1)
 		ImGui.End()
 
 	end
@@ -1070,6 +1071,7 @@ function DrawAlertGUI() -- Draw GUI Window
 			AlertWindow_Show = false
 			ImGui.PopStyleColor(ColorCountAlert)
 			ImGui.PopStyleVar(1)
+			ImGui.SetWindowFontScale(1)
 			ImGui.End()
 			if remindNPC > 0 then
 				alertTime = os.time()
