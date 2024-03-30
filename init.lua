@@ -92,7 +92,8 @@ local GUI_Main = {
 	Show  = false,
 	Locked = false,
 	Flags = bit32.bor(
-		ImGuiWindowFlags.None
+		ImGuiWindowFlags.None,
+		ImGuiWindowFlags.MenuBar
 		--ImGuiWindowFlags.NoSavedSettings
 	),
 	Refresh = {
@@ -754,7 +755,9 @@ local function DrawSearchWindow()
 		ColorCount = DrawTheme(ColorCount, useThemeName)
 
 		SearchWindowOpen = ImGui.Begin("Alert Master##"..mq.TLO.Me.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
+		ImGui.BeginMenuBar()
 		DrawToggles()
+		ImGui.EndMenuBar()
 		--ImGui.SameLine()
 		
 		ImGui.Separator()
