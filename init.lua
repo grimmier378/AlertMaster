@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '1.87'
+local amVer = '1.93'
 local CMD = mq.cmd
 local TLO = mq.TLO
 local Me = TLO.Me
@@ -754,10 +754,9 @@ local function DrawSearchWindow()
 		ColorCount = DrawTheme(ColorCount, useThemeName)
 
 		SearchWindowOpen = ImGui.Begin("Alert Master##"..mq.TLO.Me.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
-		
-		ImGui.SetWindowFontScale(ZoomLvl)
 		DrawToggles()
 		--ImGui.SameLine()
+		
 		ImGui.Separator()
 		-- next row
 		if ImGui.Button(Zone.Name(), 160,22) then
@@ -785,6 +784,7 @@ local function DrawSearchWindow()
 			end
 			ImGui.PopStyleColor(1)
 		end
+
 		if currentTab == "zone" then
 			local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
 			-- ImGui.PopItemWidth()
@@ -800,6 +800,7 @@ local function DrawSearchWindow()
 				GUI_Main.Refresh.Table.Unhandled = true
 			end
 			ImGui.Separator()
+			ImGui.SetWindowFontScale(ZoomLvl)
 			if ImGui.BeginTable('##RulesTable', 8, GUI_Main.Table.Flags) then
 				ImGui.TableSetupScrollFreeze(0, 1)
 				ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
@@ -878,6 +879,7 @@ local function DrawSearchWindow()
 				end
 			end)
 			-- Now build the table with the sorted list
+			ImGui.SetWindowFontScale(ZoomLvl)
 			if next(sortedNpcs) ~= nil then
 				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
 					-- Set up table headers
@@ -987,7 +989,7 @@ local function Config_GUI(open)
 	-- Slider for adjusting zoom level
 	local tmpZoom = ZoomLvl
 	if ZoomLvl then
-		tmpZoom = ImGui.SliderFloat("Zoom Level", tmpZoom, 0.5, 2.0)
+		tmpZoom = ImGui.SliderFloat("Text Scaling", tmpZoom, 0.5, 2.0)
 	end
 	if ZoomLvl ~= tmpZoom then
 		ZoomLvl = tmpZoom
