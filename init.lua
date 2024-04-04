@@ -59,7 +59,7 @@ local useThemeName = 'Default'
 local openConfigGUI = false
 local themeFile = mq.configDir .. '/MyThemeZ.lua'
 local ZoomLvl = 1.0
-local ColorCountAlert, ColorCountConf, ColorCount = 0, 0, 0
+local ColorCountAlert, ColorCountConf, ColorCount, StyleCount, StyleCountConf, StyleCountAlert = 0, 0, 0, 0, 0, 0
 
 ---@class
 local DistColorRanges = {
@@ -504,20 +504,34 @@ end
 
 ----------------------------
 ---comment
----@param counter integer -- the counter used for this window to keep track of color changes
 ---@param themeName string -- name of the theme to load form table
----@return integer -- returns the new counter value 
-local function DrawTheme(counter, themeName)
-	-- Push Theme Colors
+---@return integer, integer -- returns the new counter values 
+local function DrawTheme(themeName)
+	local StyleCounter = 0
+	local ColorCounter = 0
 	for tID, tData in pairs(theme.Theme) do
 		if tData.Name == themeName then
 			for pID, cData in pairs(theme.Theme[tID].Color) do
 				ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
-				counter = counter +1
+				ColorCounter = ColorCounter + 1
+			end
+			if tData['Style'] ~= nil then
+				if next(tData['Style']) ~= nil then
+                    
+					for sID, sData in pairs (theme.Theme[tID].Style) do
+						if sData.Size ~= nil then
+							ImGui.PushStyleVar(sID, sData.Size)
+							StyleCounter = StyleCounter + 1
+							elseif sData.X ~= nil then
+							ImGui.PushStyleVar(sID, sData.X, sData.Y)
+							StyleCounter = StyleCounter + 1
+						end
+					end
+				end
 			end
 		end
 	end
-	return counter
+	return ColorCounter, StyleCounter
 end
 
 local function DrawToggles()
@@ -750,9 +764,10 @@ local function DrawSearchWindow()
 		GUI_Main.Flags = bit32.band(GUI_Main.Flags, bit32.bnot(ImGuiWindowFlags.NoMove), bit32.bnot(ImGuiWindowFlags.NoResize))
 	end
 	if SearchWindowOpen then
-		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
+		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		ColorCount = 0
-		ColorCount = DrawTheme(ColorCount, useThemeName)
+		StyleCount = 0
+		ColorCount, StyleCount = DrawTheme(useThemeName)
 
 		SearchWindowOpen = ImGui.Begin("Alert Master##"..mq.TLO.Me.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
 		ImGui.BeginMenuBar()
@@ -941,11 +956,9 @@ local function DrawSearchWindow()
 				ImGui.Text('No spawns in list for this zone. Add some!')
 			end
 		end
-		ImGui.PopStyleVar(1)
+		if StyleCount > 0 then ImGui.PopStyleVar(StyleCount) end
 		if ColorCount > 0 then ImGui.PopStyleColor(ColorCount) end
 		ImGui.SetWindowFontScale(1)
-		--ImGui.BeginGroup()
-		-- ImGui.EndGroup()
 		if ImGui.IsWindowHovered() then
 			ImGui.SetWindowFocus("Alert Master##"..mq.TLO.Me.DisplayName())
 		end
@@ -958,14 +971,16 @@ end
 local function Config_GUI(open)
 	if not openConfigGUI then return end
 	ColorCountConf = 0
+	StyleCountConf = 0
 	-- local themeName = theme.LoadTheme or 'notheme'
-	ColorCountConf = DrawTheme(ColorCountConf, useThemeName)
+	ColorCountConf, StyleCountConf = DrawTheme(useThemeName)
 
 	open, openConfigGUI = ImGui.Begin("Alert master Config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoCollapse))
 	ImGui.SetWindowFontScale(ZoomLvl)
 	if not openConfigGUI then
 		openConfigGUI = false
 		open = false
+		if StyleCountConf > 0 then ImGui.PopStyleVar(StyleCountConf) end
 		if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
 		ImGui.SetWindowFontScale(1)
 		ImGui.End()
@@ -1005,7 +1020,7 @@ local function Config_GUI(open)
 		settings[CharConfig]['ZoomLvl'] = ZoomLvl
 		save_settings()
 	end
-
+	if StyleCountConf > 0 then ImGui.PopStyleVar(StyleCountConf) end
 	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
 	ImGui.SetWindowFontScale(1)
 	ImGui.End()
@@ -1062,15 +1077,16 @@ function DrawAlertGUI() -- Draw GUI Window
 	if AlertWindowOpen then
 		local opened = false
 		ColorCountAlert = 0
+		StyleCountAlert = 0
 		if mq.TLO.Me.Zoning() then return end
-		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
-		ColorCountAlert = DrawTheme(ColorCountAlert, useThemeName)
+		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
+		ColorCountAlert, StyleCountAlert = DrawTheme(useThemeName)
 		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
 		if not opened then
 			AlertWindowOpen = false
 			AlertWindow_Show = false
 			ImGui.PopStyleColor(ColorCountAlert)
-			ImGui.PopStyleVar(1)
+			ImGui.PopStyleVar(StyleCountAlert)
 			ImGui.SetWindowFontScale(1)
 			ImGui.End()
 			if remindNPC > 0 then
@@ -1082,7 +1098,7 @@ function DrawAlertGUI() -- Draw GUI Window
 			ImGui.SetWindowFontScale(ZoomLvl)
 			BuildAlertRows()
 		end
-		ImGui.PopStyleVar(1)
+		ImGui.PopStyleVar(StyleCountAlert)
 		ImGui.PopStyleColor(ColorCountAlert)
 		ImGui.SetWindowFontScale(1)
 		ImGui.End()
