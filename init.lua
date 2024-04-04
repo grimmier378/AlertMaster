@@ -1014,12 +1014,19 @@ local function Config_GUI(open)
 		settings[CharConfig]['ZoomLvl'] = ZoomLvl
 	end
 
-	if ImGui.Button('close') then
+	if ImGui.Button('Reload Theme File') then
+		load_settings()
+	end
+
+	ImGui.SameLine()
+
+	if ImGui.Button('Close') then
 		openConfigGUI = false
 		settings[CharConfig]['theme'] = useThemeName
 		settings[CharConfig]['ZoomLvl'] = ZoomLvl
 		save_settings()
 	end
+
 	if StyleCountConf > 0 then ImGui.PopStyleVar(StyleCountConf) end
 	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
 	ImGui.SetWindowFontScale(1)
