@@ -959,10 +959,6 @@ local function DrawSearchWindow()
 		if StyleCount > 0 then ImGui.PopStyleVar(StyleCount) end
 		if ColorCount > 0 then ImGui.PopStyleColor(ColorCount) end
 		ImGui.SetWindowFontScale(1)
-		if ImGui.IsWindowHovered() then
-			ImGui.SetWindowFocus("Alert Master##"..mq.TLO.Me.DisplayName())
-		end
-		ImGui.SetWindowFontScale(1)
 		ImGui.End()
 
 	end
