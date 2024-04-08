@@ -768,16 +768,18 @@ local function DrawSearchWindow()
 		ColorCount = 0
 		StyleCount = 0
 		ColorCount, StyleCount = DrawTheme(useThemeName)
-
+		if ZoomLvl > 1.25 then ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 4,7) end
 		SearchWindowOpen = ImGui.Begin("Alert Master##"..mq.TLO.Me.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
 		ImGui.BeginMenuBar()
+		ImGui.SetWindowFontScale(ZoomLvl)
 		DrawToggles()
 		ImGui.EndMenuBar()
+		ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 4,3)
 		--ImGui.SameLine()
-		
+		ImGui.SetWindowFontScale(ZoomLvl)
 		ImGui.Separator()
 		-- next row
-		if ImGui.Button(Zone.Name(), 160,22) then
+		if ImGui.Button(Zone.Name(), 160,(22 * ZoomLvl)) then
 			currentTab = "zone"
 			RefreshZone()
 		end
@@ -818,7 +820,7 @@ local function DrawSearchWindow()
 				GUI_Main.Refresh.Table.Unhandled = true
 			end
 			ImGui.Separator()
-			ImGui.SetWindowFontScale(ZoomLvl)
+			
 			if ImGui.BeginTable('##RulesTable', 8, GUI_Main.Table.Flags) then
 				ImGui.TableSetupScrollFreeze(0, 1)
 				ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
@@ -956,7 +958,7 @@ local function DrawSearchWindow()
 				ImGui.Text('No spawns in list for this zone. Add some!')
 			end
 		end
-		if StyleCount > 0 then ImGui.PopStyleVar(StyleCount) end
+		if StyleCount > 0 then ImGui.PopStyleVar(StyleCount) else ImGui.PopStyleVar(1) end
 		if ColorCount > 0 then ImGui.PopStyleColor(ColorCount) end
 		ImGui.SetWindowFontScale(1)
 		ImGui.End()
@@ -1036,8 +1038,8 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 		if ImGui.BeginTable("AlertTable", 3,spawnListFlags) then
 			ImGui.TableSetupScrollFreeze(0, 1)
 			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
-			ImGui.TableSetupColumn("Distance", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
-			ImGui.TableSetupColumn("Direction", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
+			ImGui.TableSetupColumn("Dir", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 			ImGui.TableHeadersRow()
 			for id, spawnData in pairs(spawnAlerts) do
 				local sHeadingTo = mq.TLO.Spawn(spawnData.ID).HeadingTo() or 0
