@@ -40,11 +40,43 @@ function LIP.load(fileName)
 	for line in file:lines() do
 		local tempSection = line:match('^%[([^%[%]]+)%]$');
 		if(tempSection)then
+			-- print(tempSection)
 			section = tonumber(tempSection) and tonumber(tempSection) or tempSection;
 			data[section] = data[section] or {};
 		end
 		local param, value = line:match("^([%w|_'.%s-]+)=%s-(.+)$");
 		if(param and value ~= nil)then
+			if(tonumber(value))then
+				value = tonumber(value);
+			elseif(value == 'true')then
+				value = true;
+			elseif(value == 'false')then
+				value = false;
+			end
+			if(tonumber(param))then
+				param = tonumber(param);
+			end
+			data[section][param] = value;
+		end
+	end
+	file:close();
+	return data;
+end
+
+function LIP.loadSM(fileName)
+	assert(type(fileName) == 'string', 'Parameter "fileName" must be a string.');
+	local file = assert(io.open(fileName, 'r'), 'Error loading file : ' .. fileName);
+	local data = {};
+	local section;
+	for line in file:lines() do
+		local tempSection = line:match('^%[([^%[%]]+)%]%+$');
+		if(tempSection)then
+			-- print(tempSection)
+			section = tonumber(tempSection) and tonumber(tempSection) or tempSection;
+			data[section] = data[section] or {};
+		end
+		local param, value = line:match("^([%w|_'.%s-]+)=%s-(.+)$");
+		if(param ~= 'OnSpawnCommand' and param ~= nil and value ~= nil)then
 			if(tonumber(value))then
 				value = tonumber(value);
 			elseif(value == 'true')then

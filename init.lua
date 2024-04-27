@@ -34,21 +34,24 @@ local COLOR = require('color.colors')
 local arg = {...}
 local amVer = '1.93'
 local CMD = mq.cmd
+local CMDF = mq.cmdf
 local TLO = mq.TLO
-local Me = TLO.Me
+local ME = TLO.Me
 local SpawnCount = TLO.SpawnCount
 local NearestSpawn = TLO.NearestSpawn
+local smSettings = mq.configDir ..'/MQ2SpawnMaster.ini'
+local smSettingImported = mq.configDir ..'/MQ2SpawnMaster_Imp.ini'
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
 local groupCmd = '/dgae ' -- assumes DanNet, if EQBC found we switch to '/bcca /'
 local angle = 0
-local CharConfig = 'Char_'..Me.DisplayName()..'_Config'
-local CharCommands = 'Char_'..Me.DisplayName()..'_Commands'
+local CharConfig = 'Char_'..ME.DisplayName()..'_Config'
+local CharCommands = 'Char_'..ME.DisplayName()..'_Commands'
 local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
-local tSafeZones, spawnAlerts = {}, {}
+local tSafeZones, spawnAlerts, spawnsSpawnMaster = {}, {}, {}
 local alertTime, numAlerts = 0,0
-local doBeep, doAlert, DoDrawArrow = false, false, false
+local doBeep, doAlert, DoDrawArrow, haveSM = false, false, false, false
 -- [[ UI ]] --
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
@@ -152,10 +155,10 @@ local GUI_Main = {
 }
 
 -- helpers
-local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', mq.TLO.Time()) end
+local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', TLO.Time()) end
 
 local GetCharZone = function()
-	return '\aw[\ao'..Me.DisplayName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
+	return '\aw[\ao'..ME.DisplayName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
 end
 
 ---comment Check to see if the file we want to work on exists.
@@ -190,7 +193,26 @@ local check_safe_zone = function()
 	return tSafeZones[Zone.ShortName():lower()]
 end
 
-local load_settings = function()
+local function import_spawnmaster(val)
+	local zoneShort = Zone.ShortName():lower()
+	local val_str = tostring(val):gsub("\"","")
+	-- print(val_str)
+	if zoneShort ~= nil then
+		if settings[zoneShort] == nil then settings[zoneShort] = {} end
+		-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
+		for k, v in pairs(settings[zoneShort]) do
+			if settings[zoneShort][k] == val_str then
+				-- print_ts("\aySpawn alert \""..val_str.."\" already exists.")
+				return
+			end
+		end
+		-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
+		settings[zoneShort]['Spawn'..getTableSize(settings[zoneShort])+1] = val_str
+		save_settings()
+	end
+end
+
+local function load_settings()
 	config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
 	settings_file = '/config/AlertMaster.ini'
 	settings_path = config_dir..settings_file
@@ -207,6 +229,15 @@ local load_settings = function()
 	end
 	if File_Exists(themeFile) then
 		theme = dofile(themeFile)
+	end
+	if not File_Exists(smSettingImported) then
+		if File_Exists(smSettings) then
+			LIP.save(smSettingImported, LIP.loadSM(smSettings))
+			load_settings()
+		end
+	elseif File_Exists(smSettingImported) then
+		spawnsSpawnMaster = LIP.load(smSettingImported)
+		haveSM = true
 	end
 	useThemeName = theme.LoadTheme
 	-- if this character doesn't have the sections in the ini, create them
@@ -270,8 +301,8 @@ local function ColorDistance(distance)
 	end
 end
 
-local function isSpawnInAlerts(spawnName, spawnAlerts)
-	for _, spawnData in pairs(spawnAlerts) do
+local function isSpawnInAlerts(spawnName, spawnAlertsTable)
+	for _, spawnData in pairs(spawnAlertsTable) do
 		if spawnData.DisplayName() == spawnName or spawnData.Name() == spawnName then
 			return true
 		end
@@ -290,7 +321,7 @@ local function SpawnToEntry(spawn, id, table)
 			ID = id or 0,
 			MobName = spawn.DisplayName() or ' ',
 			MobDirtyName = spawn.Name() or ' ',
-			MobZoneName = mq.TLO.Zone.Name()or ' ',
+			MobZoneName = Zone.Name()or ' ',
 			MobDist = math.floor(spawn.Distance() or 0),
 			MobLoc = spawn.Loc() or ' ',
 			MobID = spawn.ID()or 0,
@@ -418,9 +449,9 @@ local function RefreshZone()
 		local spawn = npcs[i]
 		if #npcs>0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
 	end
-	for i = 1, mq.TLO.Me.XTargetSlots() do
-		if mq.TLO.Me.XTarget(i)()~=nil and mq.TLO.Me.XTarget(i)() ~= 0 then
-			local spawn = mq.TLO.Me.XTarget(i)
+	for i = 1, ME.XTargetSlots() do
+		if ME.XTarget(i)()~=nil and ME.XTarget(i)() ~= 0 then
+			local spawn = ME.XTarget(i)
 			if spawn.ID()>0 then InsertTableSpawn(xTarTable, spawn, tonumber(spawn.ID())) end
 		end
 	end
@@ -470,15 +501,15 @@ end
 
 -- Tighter relative direction code for when I make better arrows.
 local function getRelativeDirection(spawnDir)
-	local meHeading = directions(mq.TLO.Me.Heading())
+	local meHeading = directions(ME.Heading())
 	local spawnHeadingTo = directions(spawnDir)
 	local difference = spawnHeadingTo - meHeading
 	difference = (difference + 360) % 360
 	return difference
 end
 
-function RotatePoint(p, cx, cy, angle)
-	local radians = math.rad(angle)
+function RotatePoint(p, cx, cy, degAngle)
+	local radians = math.rad(degAngle)
 	local cosA = math.cos(radians)
 	local sinA = math.sin(radians)
 	local newX = cosA * (p.x - cx) - sinA * (p.y - cy) + cx
@@ -504,13 +535,13 @@ end
 
 ----------------------------
 ---comment
----@param themeName string -- name of the theme to load form table
+---@param tName string -- name of the theme to load form table
 ---@return integer, integer -- returns the new counter values 
-local function DrawTheme(themeName)
+local function DrawTheme(tName)
 	local StyleCounter = 0
 	local ColorCounter = 0
 	for tID, tData in pairs(theme.Theme) do
-		if tData.Name == themeName then
+		if tData.Name == tName then
 			for pID, cData in pairs(theme.Theme[tID].Color) do
 				ImGui.PushStyleColor(pID, ImVec4(cData.Color[1], cData.Color[2], cData.Color[3], cData.Color[4]))
 				ColorCounter = ColorCounter + 1
@@ -706,16 +737,16 @@ local function DrawRuleRow(entry)
 	ImGui.Text('%s', entry.MobName)
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
-		ImGui.Text("Right-Click to Navigate\nCtrl+Right-Click Group Nav")
+		ImGui.Text("%s\n\nRight-Click to Navigate\nCtrl+Right-Click Group Nav", entry.MobName)
 		ImGui.EndTooltip()
 	end
 		-- Right-click interaction uses the original spawnName
 		if ImGui.IsItemHovered() then
 			if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
-				mq.cmdf("/noparse %s/docommand /timed ${Math.Rand[5,25]} /nav id %s",groupCmd,entry.MobID)
+				CMDF("/noparse %s/docommand /timed ${Math.Rand[5,25]} /nav id %s",groupCmd,entry.MobID)
 			elseif
 				ImGui.IsMouseReleased(1) then
-				mq.cmdf('/nav id %s',entry.MobID)
+				CMDF('/nav id %s',entry.MobID)
 			end
 		end
 	ImGui.SameLine()
@@ -757,7 +788,7 @@ local function DrawRuleRow(entry)
 end
 
 local function DrawSearchWindow()
-	if mq.TLO.Me.Zoning() then return end
+	if ME.Zoning() then return end
 	if GUI_Main.Locked then
 		GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
 		else
@@ -769,17 +800,18 @@ local function DrawSearchWindow()
 		StyleCount = 0
 		ColorCount, StyleCount = DrawTheme(useThemeName)
 		if ZoomLvl > 1.25 then ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 4,7) end
-		SearchWindowOpen = ImGui.Begin("Alert Master##"..mq.TLO.Me.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
+		SearchWindowOpen = ImGui.Begin("Alert Master##"..ME.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
 		ImGui.BeginMenuBar()
 		ImGui.SetWindowFontScale(ZoomLvl)
 		DrawToggles()
 		ImGui.EndMenuBar()
-		ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 4,3)
+		if ZoomLvl > 1.25 then ImGui.PopStyleVar(1) end
+		-- ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 4,3)
 		--ImGui.SameLine()
 		ImGui.SetWindowFontScale(ZoomLvl)
 		ImGui.Separator()
 		-- next row
-		if ImGui.Button(Zone.Name(), 160,(22 * ZoomLvl)) then
+		if ImGui.Button(Zone.Name(), 160,0.0) then
 			currentTab = "zone"
 			RefreshZone()
 		end
@@ -833,7 +865,7 @@ local function DrawSearchWindow()
 				ImGui.TableSetupColumn(Icons.FA_COMPASS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.MobDirection)
 				ImGui.TableHeadersRow()
 				local sortSpecs = ImGui.TableGetSortSpecs()
-				if not TLO.Me.Zoning() then
+				if not ME.Zoning() then
 					if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
 						if #Table_Cache.Unhandled > 0 then
 							GUI_Main.Table.SortSpecs = sortSpecs
@@ -931,10 +963,10 @@ local function DrawSearchWindow()
 							-- Right-click interaction uses the original spawnName
 							if ImGui.IsItemHovered() then
 								if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
-									mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav spawn "%s"',groupCmd,spawnName)
+									CMDF('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav spawn "%s"',groupCmd,spawnName)
 								elseif
 									ImGui.IsMouseReleased(1) then
-									mq.cmdf('/nav spawn "%s"',spawnName)
+									CMDF('/nav spawn "%s"',spawnName)
 								end
 							end
 						end
@@ -958,7 +990,7 @@ local function DrawSearchWindow()
 				ImGui.Text('No spawns in list for this zone. Add some!')
 			end
 		end
-		if StyleCount > 0 then ImGui.PopStyleVar(StyleCount) else ImGui.PopStyleVar(1) end
+		if StyleCount > 0 then ImGui.PopStyleVar(StyleCount) end
 		if ColorCount > 0 then ImGui.PopStyleColor(ColorCount) end
 		ImGui.SetWindowFontScale(1)
 		ImGui.End()
@@ -1042,7 +1074,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 			ImGui.TableSetupColumn("Dir", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
 			ImGui.TableHeadersRow()
 			for id, spawnData in pairs(spawnAlerts) do
-				local sHeadingTo = mq.TLO.Spawn(spawnData.ID).HeadingTo() or 0
+				local sHeadingTo = TLO.Spawn(spawnData.ID).HeadingTo() or 0
 				ImGui.TableNextRow()
 				ImGui.TableSetColumnIndex(0)
 				ImGui.PushStyleColor(ImGuiCol.Text,COLOR.color('green'))
@@ -1055,10 +1087,10 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 				end
 					if ImGui.IsItemHovered() then
 						if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
-							mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s',groupCmd,spawnData.ID())
+							CMDF('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s',groupCmd,spawnData.ID())
 						elseif
 							ImGui.IsMouseReleased(1) then
-							mq.cmdf('/nav id %s',spawnData.ID())
+							CMDF('/nav id %s',spawnData.ID())
 						end
 					end
 				ImGui.TableSetColumnIndex(1)
@@ -1083,7 +1115,7 @@ function DrawAlertGUI() -- Draw GUI Window
 		local opened = false
 		ColorCountAlert = 0
 		StyleCountAlert = 0
-		if mq.TLO.Me.Zoning() then return end
+		if ME.Zoning() then return end
 		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		ColorCountAlert, StyleCountAlert = DrawTheme(useThemeName)
 		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
@@ -1366,12 +1398,12 @@ local load_binds = function()
 			print_ts('\ayRemoved Command \"'..val_str..'\"')
 			elseif cmd == 'cmdlist' then
 			if getTableSize(settings[CharCommands]) > 0 then
-				print_ts('\ayCommands (\a-t'..Me.DisplayName()..'\ax): ')
+				print_ts('\ayCommands (\a-t'..ME.DisplayName()..'\ax): ')
 				for k, v in pairs(settings[CharCommands]) do
 					print_ts('\t\a-t'..k..' - '..v)
 				end
 				else
-				print_ts('\ayCommands (\a-t'..Me.DisplayName()..'\ax): No commands configured.')
+				print_ts('\ayCommands (\a-t'..ME.DisplayName()..'\ax): No commands configured.')
 			end
 		end
 		-- adding/removing/listing ignored pcs
@@ -1398,12 +1430,12 @@ local load_binds = function()
 			print_ts('\ayNo longer ignoring \"'..val_str..'\"')
 			elseif cmd == 'ignorelist' then
 			if getTableSize(settings['Ignore']) > 0 then
-				print_ts('\ayIgnore List (\a-t'..Me.DisplayName()..'\ax): ')
+				print_ts('\ayIgnore List (\a-t'..ME.DisplayName()..'\ax): ')
 				for k, v in pairs(settings['Ignore']) do
 					print_ts('\t\a-t'..k..' - '..v)
 				end
 				else
-				print_ts('\ayIgnore List (\a-t'..Me.DisplayName()..'\ax): No ignore list configured.')
+				print_ts('\ayIgnore List (\a-t'..ME.DisplayName()..'\ax): No ignore list configured.')
 			end
 		end
 		-- Announce Alerts
@@ -1477,7 +1509,7 @@ local setup = function()
 	active = true
 	radius = arg[1] or 200
 	zradius = arg[2] or 100
-	if mq.TLO.Plugin('mq2eqbc').IsLoaded() then groupCmd = '/bcaa /' end
+	if TLO.Plugin('mq2eqbc').IsLoaded() then groupCmd = '/bcaa /' end
 	load_settings()
 	load_binds()
 	mq.imgui.init("Alert_Master", DrawAlertGUI)
@@ -1507,7 +1539,7 @@ local should_include_player = function(spawn)
 	-- if pc is in group, raid or (optionally) guild, skip
 	local in_group = Group.Members() ~= nil and Group.Member(name).Index() ~= nil
 	local in_raid = Raid.Members() > 0 and Raid.Member(name)() ~= nil
-	local in_guild = ignoreguild and Me.Guild() ~= nil and Me.Guild() == guild
+	local in_guild = ignoreguild and ME.Guild() ~= nil and ME.Guild() == guild
 	if in_group or in_raid or in_guild then return false end
 	return true
 end
@@ -1590,8 +1622,8 @@ end
 
 local check_for_pcs = function()
 	if active and pcs then
-		local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..Me.ID())
-		local charZone = '\aw[\a-o'..Me.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..ME.ID())
+		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tPlayers[name] == nil then
@@ -1620,7 +1652,18 @@ local check_for_spawns = function()
 	if active and spawns then
 		local tmp = spawn_search_npcs()
 		local spawnAlertsUpdated = false
-		local charZone = '\aw[\a-o'..Me.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		if haveSM then
+			local spawns = {}
+			if spawnsSpawnMaster[Zone.Name()] ~= nil then
+				spawns = spawnsSpawnMaster[Zone.Name()]
+					for k, v in pairs(spawns) do
+						-- print(Zone.Name())
+						--print(v)
+						import_spawnmaster(v)
+					end
+			end
+		end
 		if tmp ~= nil then
 			for id, v in pairs(tmp) do
 				if tSpawns[id] == nil then
@@ -1670,8 +1713,8 @@ end
 
 local check_for_announce = function()
 	if active and announce then
-		local tmp = spawn_search_players('pc notid '..Me.ID())
-		local charZone = '\aw[\a-o'..Me.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local tmp = spawn_search_players('pc notid '..ME.ID())
+		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tAnnounce[name] == nil then
@@ -1711,7 +1754,7 @@ local loop = function()
 			check_for_announce()
 			check_for_pcs()
 		end
-		if Me.Zoning() then
+		if ME.Zoning() then
 			numAlerts = 0
 			if SearchWindow_Show then
 				SearchWindow_Show = false
@@ -1748,7 +1791,7 @@ local loop = function()
 			end
 		end
 		if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
-		curZone = TLO.Zone.Name
+		curZone = Zone.Name
 		if GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
 		mq.delay(delay..'s')
 	end
