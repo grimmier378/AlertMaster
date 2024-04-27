@@ -50,7 +50,7 @@ local CharCommands = 'Char_'..ME.DisplayName()..'_Commands'
 local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
 local tSafeZones, spawnAlerts, spawnsSpawnMaster = {}, {}, {}
 local alertTime, numAlerts = 0,0
-local doBeep, doAlert, DoDrawArrow, haveSM = false, false, false, false
+local doBeep, doAlert, DoDrawArrow, haveSM, importZone = false, false, false, false, false
 -- [[ UI ]] --
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
@@ -195,19 +195,18 @@ end
 local function import_spawnmaster(val)
 	local zoneShort = Zone.ShortName():lower()
 	local val_str = tostring(val):gsub("\"","")
-	-- print(val_str)
 	if zoneShort ~= nil then
 		if settings[zoneShort] == nil then settings[zoneShort] = {} end
 		-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
 		for k, v in pairs(settings[zoneShort]) do
 			if settings[zoneShort][k] == val_str then
-				-- print_ts("\aySpawn alert \""..val_str.."\" already exists.")
-				return
+				return false
 			end
 		end
 		-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
 		settings[zoneShort]['Spawn'..getTableSize(settings[zoneShort])+1] = val_str
 		save_settings()
+		return true
 	end
 end
 
@@ -233,6 +232,7 @@ local function load_settings()
 	if File_Exists(smSettings) then
 		spawnsSpawnMaster = LIP.loadSM(smSettings)
 		haveSM = true
+		importZone = true
 	end
 
 	useThemeName = theme.LoadTheme
@@ -1649,15 +1649,20 @@ local check_for_spawns = function()
 		local tmp = spawn_search_npcs()
 		local spawnAlertsUpdated = false
 		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
-		if haveSM then
-			local spawns = {}
-			if spawnsSpawnMaster[Zone.Name()] ~= nil then
-				spawns = spawnsSpawnMaster[Zone.Name()]
-					for k, v in pairs(spawns) do
-						-- print(Zone.Name())
-						--print(v)
-						import_spawnmaster(v)
+		if haveSM and importZone then
+			local counter = 0
+			local tmpSpawnMaster = {}
+			if spawnsSpawnMaster[Zone.Name():lower()] ~= nil then
+				tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()]
+				for k, v in pairs(tmpSpawnMaster) do
+					if import_spawnmaster(v) then
+						counter = counter + 1
 					end
+				end
+			end
+			importZone = false
+			if counter > 0 then
+				printf('\aw[\atAlertMaster\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter)
 			end
 		end
 		if tmp ~= nil then
@@ -1737,6 +1742,7 @@ local check_for_zone_change = function()
 		tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}
 		zone_id = Zone.ID()
 		alertTime = os.time()
+		if haveSM then importZone = true end
 	end
 end
 
