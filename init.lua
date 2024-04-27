@@ -40,7 +40,6 @@ local ME = TLO.Me
 local SpawnCount = TLO.SpawnCount
 local NearestSpawn = TLO.NearestSpawn
 local smSettings = mq.configDir ..'/MQ2SpawnMaster.ini'
-local smSettingImported = mq.configDir ..'/MQ2SpawnMaster_Imp.ini'
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
@@ -230,15 +229,12 @@ local function load_settings()
 	if File_Exists(themeFile) then
 		theme = dofile(themeFile)
 	end
-	if not File_Exists(smSettingImported) then
-		if File_Exists(smSettings) then
-			LIP.save(smSettingImported, LIP.loadSM(smSettings))
-			load_settings()
-		end
-	elseif File_Exists(smSettingImported) then
-		spawnsSpawnMaster = LIP.load(smSettingImported)
+
+	if File_Exists(smSettings) then
+		spawnsSpawnMaster = LIP.loadSM(smSettings)
 		haveSM = true
 	end
+
 	useThemeName = theme.LoadTheme
 	-- if this character doesn't have the sections in the ini, create them
 	if settings[CharConfig] == nil then settings[CharConfig] = defaultConfig end
