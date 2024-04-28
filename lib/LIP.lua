@@ -75,7 +75,7 @@ function LIP.loadSM(fileName)
 	local data = {};
 	local section;
 	for line in file:lines() do
-		local tempSection = line:match('^%[([^%[%]]+)%]%+$');
+		local tempSection = line:match('^%[([^%[%]]+)%]');
 		if(tempSection)then
 			tempSection = string.lower(tempSection)
 			section = tonumber(tempSection) and tonumber(tempSection) or tempSection;

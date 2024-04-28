@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '2.01'
+local amVer = '2.02'
 local CMD = mq.cmd
 local CMDF = mq.cmdf
 local TLO = mq.TLO
@@ -55,6 +55,7 @@ local soundGM = 'GM.wav'
 local soundNPC = 'NPC.wav'
 local soundPC = 'PC.wav'
 local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC = false, false, false, false, false, false, false, false
+local delay, remind, pcs, spawns, gms, announce, ignoreguild, radius, zradius, remindNPC, showAggro = 1, 30, true, true, true, false, true, 100, 100, 5, true
 -- [[ UI ]] --
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
@@ -240,7 +241,7 @@ local function import_spawnmaster(val)
 		if settings[zoneShort] == nil then settings[zoneShort] = {} end
 		-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
 		for k, v in pairs(settings[zoneShort]) do
-			if settings[zoneShort][k] == val_str then
+			if string.find(string.lower(settings[zoneShort][k]), string.lower(val_str)) then
 				return false
 			end
 		end
@@ -1072,39 +1073,184 @@ local function Config_GUI(open)
 		ImGui.End()
 		return open
 	end
-	ImGui.SameLine()
-
-	ImGui.Text("Cur Theme: %s", useThemeName)
-	-- Combo Box Load Theme
-	if ImGui.BeginCombo("Load Theme", useThemeName) then
-		ImGui.SetWindowFontScale(ZoomLvl)
-		for k, data in pairs(theme.Theme) do
-			local isSelected = data.Name == useThemeName
-			if ImGui.Selectable(data.Name, isSelected) then
-				theme.LoadTheme = data.Name
-				useThemeName = theme.LoadTheme
-				settings[CharConfig]['theme'] = useThemeName
-				save_settings()
+	ImGui.SetNextItemWidth(200)
+	if ImGui.CollapsingHeader('Theme Settings##AlertMaster') then
+		ImGui.Text("Cur Theme: %s", useThemeName)
+		-- Combo Box Load Theme
+		if ImGui.BeginCombo("Load Theme", useThemeName) then
+			ImGui.SetWindowFontScale(ZoomLvl)
+			for k, data in pairs(theme.Theme) do
+				local isSelected = data.Name == useThemeName
+				if ImGui.Selectable(data.Name, isSelected) then
+					theme.LoadTheme = data.Name
+					useThemeName = theme.LoadTheme
+					settings[CharConfig]['theme'] = useThemeName
+					save_settings()
+				end
 			end
+			ImGui.EndCombo()
 		end
-		ImGui.EndCombo()
+
+		-- Slider for adjusting zoom level
+		local tmpZoom = ZoomLvl
+		if ZoomLvl then
+			tmpZoom = ImGui.SliderFloat("Text Scaling", tmpZoom, 0.5, 2.0)
+		end
+		if ZoomLvl ~= tmpZoom then
+			ZoomLvl = tmpZoom
+			settings[CharConfig]['ZoomLvl'] = ZoomLvl
+		end
+
+		if ImGui.Button('Reload Theme File') then
+			load_settings()
+		end
 	end
 
-	-- Slider for adjusting zoom level
-	local tmpZoom = ZoomLvl
-	if ZoomLvl then
-		tmpZoom = ImGui.SliderFloat("Text Scaling", tmpZoom, 0.5, 2.0)
-	end
-	if ZoomLvl ~= tmpZoom then
-		ZoomLvl = tmpZoom
-		settings[CharConfig]['ZoomLvl'] = ZoomLvl
+	if ImGui.CollapsingHeader('Toggles##AlertMaster') then
+		local tmpLock = GUI_Main.Locked
+		local tmpAlrt = doAlert
+		local tmpBeep = doBeep
+		local tmpArrow = DoDrawArrow
+		local tmpAgg = showAggro
+
+		tmpLock = ImGui.Checkbox('Lock Windows', tmpLock)
+		if tmpLock ~= GUI_Main.Locked then
+			GUI_Main.Locked = tmpLock
+			settings[CharConfig]['locked'] = GUI_Main.Locked
+			save_settings()
+		end
+		ImGui.SameLine()
+		tmpAlrt = ImGui.Checkbox('Show Pop Up', tmpAlrt)
+		if tmpAlrt ~= doAlert then
+			doAlert = tmpAlrt
+			settings[CharConfig]['popup'] = doAlert
+			save_settings()
+		end
+		ImGui.SameLine()
+		tmpBeep = ImGui.Checkbox('Do Beeps', tmpBeep)
+		if doBeep ~= tmpBeep then
+			doBeep = tmpBeep
+			settings[CharConfig]['beep'] = doBeep
+			save_settings()
+		end
+
+		tmpArrow = ImGui.Checkbox('Show Arrows', tmpArrow)
+		if DoDrawArrow ~= tmpArrow then
+			DoDrawArrow = tmpArrow
+			settings[CharConfig]['arrows'] = DoDrawArrow
+			save_settings()
+		end
+		ImGui.SameLine()
+		tmpAgg = ImGui.Checkbox('Show Aggro Meters', tmpAgg)
+		if showAggro ~= tmpAgg then
+			showAggro = tmpAgg
+			settings[CharConfig]['aggro'] = showAggro
+			save_settings()
+		end
+		
 	end
 
-	if ImGui.Button('Reload Theme File') then
-		load_settings()
-	end
+	if ImGui.CollapsingHeader('Sounds##AlertMaster') then
+		--- GM Alerts ---
+		ImGui.SeparatorText("GM Alerts##AlertMaster")
+		--- tmp vars to change ---
+		local tmpSndGM = soundGM or 'GM.wav'
+		local tmpVolGM = volGM or 100
+		local tmpDoGM = doSoundGM
 
-	ImGui.SameLine()
+		tmpDoGM = ImGui.Checkbox('GM Alert##AlertMaster', tmpDoGM)
+		if tmpDoGM ~= doSoundGM then
+			doSoundGM = tmpDoGM
+			settings[CharConfig]['doSoundGM'] = doSoundGM
+			save_settings()
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(70)
+		tmpSndGM = ImGui.InputText('Filename##GMSND', tmpSndGM)
+		if tmpSndGM ~= soundGM then
+			soundGM = tmpSndGM
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(100)
+		tmpVolGM = ImGui.InputFloat('Volume##GMVOL',tmpVolGM, 0.1)
+		if tmpVolGM ~= volGM then
+			volGM = tmpVolGM
+		end
+		ImGui.SameLine()
+		if ImGui.Button("Test and Save##GMALERT") then
+			setVolume(volGM)
+			playSound(soundGM)
+			settings[CharConfig]['volGM'] = volGM
+			settings[CharConfig]['soundGM'] = soundGM
+			save_settings()
+		end
+		--- PC Alerts ---
+		ImGui.SeparatorText("PC Alerts##AlertMaster")
+		--- tmp vars to change ---
+		local tmpSndPC = soundPC or 'PC.wav'
+		local tmpVolPC = volPC or 100
+		local tmpDoPC = doSoundPC
+		
+		tmpDoPC = ImGui.Checkbox('PC Alert##AlertMaster', tmpDoPC)
+		if tmpDoPC ~= doSoundPC then
+			doSoundPC = tmpDoPC
+			settings[CharConfig]['doSoundPC'] = doSoundPC
+			save_settings()
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(70)
+		tmpSndPC = ImGui.InputText('Filename##PCSND', tmpSndPC)
+		if tmpSndPC ~= soundPC then
+			soundPC = tmpSndPC
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(100)
+		tmpVolPC = ImGui.InputFloat('Volume##PCVOL',tmpVolPC, 0.1)
+		if tmpVolPC ~= volPC then
+			volPC = tmpVolPC
+		end
+		ImGui.SameLine()
+		if ImGui.Button("Test and Save##PCALERT") then
+			setVolume(volPC)
+			playSound(soundPC)
+			settings[CharConfig]['volPC'] = volPC
+			settings[CharConfig]['soundPC'] = soundPC
+			save_settings()
+		end
+		--- NPC Alerts ---
+		ImGui.SeparatorText("NPC Alerts##AlertMaster")
+		--- tmp vars to change ---
+		local tmpSndNPC = soundNPC or 'NPC.wav'
+		local tmpVolNPC = volNPC or 100
+		local tmpDoNPC = doSoundNPC
+
+		tmpDoNPC = ImGui.Checkbox('NPC Alert##AlertMaster', tmpDoNPC)
+		if doSoundNPC ~= tmpDoNPC then
+			doSoundNPC = tmpDoNPC
+			settings[CharConfig]['doSoundNPC'] = doSoundNPC
+			save_settings()
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(70)
+		tmpSndNPC = ImGui.InputText('Filename##NPCSND', tmpSndNPC)
+		if tmpSndNPC ~= soundNPC then
+			soundNPC = tmpSndNPC
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(100)
+		tmpVolNPC = ImGui.InputFloat('Volume##NPCVOL',tmpVolNPC, 0.1)
+		if tmpVolNPC ~= volNPC then
+			volNPC = tmpVolNPC
+		end
+		ImGui.SameLine()
+		if ImGui.Button("Test and Save##NPCALERT") then
+			setVolume(volNPC)
+			playSound(soundNPC)
+			settings[CharConfig]['volNPC'] = volNPC
+			settings[CharConfig]['soundNPC'] = soundNPC
+			save_settings()
+		end
+	end
 
 	if ImGui.Button('Close') then
 		openConfigGUI = false
