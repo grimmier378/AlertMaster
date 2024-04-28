@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '2.02'
+local amVer = '2.01'
 local CMD = mq.cmd
 local CMDF = mq.cmdf
 local TLO = mq.TLO
@@ -1973,13 +1973,14 @@ local check_for_spawns = function()
 						if not AlertWindowOpen then DrawAlertGUI() end
 					end
 					alertTime = os.time()
-					if doBeep then
+					if doBeep or doSoundNPC then
 						if doSoundNPC then
 							setVolume(volNPC)
 							playSound(soundNPC)
 						else
-							CMD('/beep') end
+							CMD('/beep')
 						end
+					end
 				end
 				else
 				AlertWindow_Show = false
@@ -2056,7 +2057,7 @@ local loop = function()
 					print_ts(GetCharZone()..'\ag'..cleanName..'\ax spawn alert! '..distance..' units away.')
 				end
 				--do beep alerts
-				if doBeep then 
+				if doBeep or doSoundNPC then 
 					if doSoundNPC then
 						setVolume(volNPC)
 						playSound(soundNPC)
