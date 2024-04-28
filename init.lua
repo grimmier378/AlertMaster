@@ -50,7 +50,11 @@ local CharCommands = 'Char_'..ME.DisplayName()..'_Commands'
 local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
 local tSafeZones, spawnAlerts, spawnsSpawnMaster = {}, {}, {}
 local alertTime, numAlerts = 0,0
-local doBeep, doAlert, DoDrawArrow, haveSM, importZone = false, false, false, false, false
+local volNPC, volGM, volPC = 100, 100, 100
+local soundGM = 'GM.wav'
+local soundNPC = 'NPC.wav'
+local soundPC = 'PC.wav'
+local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC = false, false, false, false, false, false, false, false
 -- [[ UI ]] --
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
 local currentTab = "zone"
@@ -153,6 +157,37 @@ local GUI_Main = {
 	},
 }
 
+------- Sounds ----------
+local ffi = require("ffi")
+local soundsPath = mq.TLO.Lua.Dir().."\\alertmaster\\sounds\\"
+-- C code definitions
+ffi.cdef[[
+int sndPlaySoundA(const char *pszSound, unsigned int fdwSound);
+uint32_t waveOutSetVolume(void* hwo, uint32_t dwVolume);
+]]
+
+local winmm = ffi.load("winmm")
+
+local SND_ASYNC = 0x0001
+local SND_LOOP = 0x0008
+local SND_FILENAME = 0x00020000
+local flags = SND_FILENAME + SND_ASYNC
+
+-- Function to play sound allowing for simultaneous plays
+local function playSound(name)
+	local filename = soundsPath..name
+	winmm.sndPlaySoundA(filename, flags)
+ end
+ 
+ -- Function to set volume (affects all sounds globally)
+ local function setVolume(volume)
+	if volume < 0 or volume > 100 then
+		error("Volume must be between 0 and 100")
+	end
+	local vol = math.floor(volume / 100 * 0xFFFF)
+	local leftRightVolume = bit32.bor(bit32.lshift(vol, 16), vol) -- Set both left and right volume
+	winmm.waveOutSetVolume(nil, leftRightVolume)
+ end
 -- helpers
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', TLO.Time()) end
 
@@ -182,6 +217,12 @@ local function print_status()
 	print_ts('\a-tGMs (zone wide): \a-y'..tostring(gms)..'\ax')
 	print_ts('\a-tPopup Alerts: \a-y'..tostring(doAlert)..'\ax')
 	print_ts('\a-tBeep: \a-y'..tostring(doBeep)..'\ax')
+	print_ts('\a-tSound PC Alerts: \a-y'..tostring(doSoundPC)..'\ax')
+	print_ts('\a-tSound NPC Alerts: \a-y'..tostring(doSoundNPC)..'\ax')
+	print_ts('\a-tSound GM Alerts: \a-y'..tostring(doSoundGM)..'\ax')
+	print_ts('\a-tVolume PC Alerts: \a-y'..tostring(volPC)..'\ax')
+	print_ts('\a-tVolume NPC Alerts: \a-y'..tostring(volNPC)..'\ax')
+	print_ts('\a-tVolume GM Alerts: \a-y'..tostring(volGM)..'\ax')
 end
 
 local save_settings = function()
@@ -271,6 +312,24 @@ local function load_settings()
 	settings[CharConfig]['distmid'] = DistColorRanges.orange
 	DistColorRanges.red = settings[CharConfig]['distfar'] or 1200
 	settings[CharConfig]['distfar'] = DistColorRanges.red
+	doSoundGM = settings[CharConfig]['doSoundGM'] or false
+	settings[CharConfig]['doSoundGM'] = doSoundGM
+	doSoundNPC = settings[CharConfig]['doSoundNPC'] or false
+	settings[CharConfig]['doSoundNPC'] = doSoundNPC
+	doSoundPC = settings[CharConfig]['doSoundPC'] or false
+	settings[CharConfig]['doSoundPC'] = doSoundPC
+	volGM = settings[CharConfig]['volGM'] or volGM
+	settings[CharConfig]['volGM'] = volGM
+	volNPC = settings[CharConfig]['volNPC'] or volNPC
+	settings[CharConfig]['volNPC'] = volNPC
+	volPC = settings[CharConfig]['volPC'] or volPC
+	settings[CharConfig]['volPC'] = volPC
+	soundGM = settings[CharConfig]['soundGM'] or soundGM
+	settings[CharConfig]['soundGM'] = soundGM
+	soundNPC = settings[CharConfig]['soundNPC'] or soundNPC
+	settings[CharConfig]['soundNPC'] = soundNPC
+	soundPC = settings[CharConfig]['soundPC'] or soundPC
+	settings[CharConfig]['soundPC'] = soundPC
 
 	save_settings()
 	if GUI_Main.Locked then
@@ -1245,6 +1304,48 @@ local load_binds = function()
 			save_settings()
 			print_ts('\ayDelay interval = '..delay)
 		end
+		---- Volumes ----
+		if cmd == 'volnpc' and val_num > 0 then
+			settings[CharConfig]['volNPC'] = val_num
+			volNPC = val_num
+			save_settings()
+			setVolume(volNPC)
+			playSound(soundNPC)
+			print_ts('\ayNPC Volume = '..volNPC)
+		end
+		if cmd == 'volpc' and val_num > 0 then
+			settings[CharConfig]['volPC'] = val_num
+			volPC = val_num
+			save_settings()
+			setVolume(volPC)
+			playSound(soundPC)
+			print_ts('\ayPC Volume = '..volPC)
+		end
+		if cmd == 'volgm' and val_num > 0 then
+			settings[CharConfig]['volGM'] = val_num
+			volGM = val_num
+			save_settings()
+			setVolume(volGM)
+			playSound(soundGM)
+			print_ts('\ayGM Volume = '..volGM)
+		end
+		----- Sounds -----
+		if cmd == 'dosound' and val_str ~= nil then
+			if val_str == 'npc' then
+				doSoundNPC = not doSoundNPC
+				settings[CharConfig]['doSoundNPC'] = doSoundNPC
+				print_ts('\aySetting doSoundNPC = '..tostring(doSoundNPC))
+			elseif val_str == 'pc' then
+				doSoundPC = not doSoundPC
+				settings[CharConfig]['doSoundPC'] = doSoundPC
+				print_ts('\aySetting doSoundPC = '..tostring(doSoundPC))
+			elseif val_str == 'gm' then
+				doSoundGM = not doSoundGM
+				settings[CharConfig]['doSoundGM'] = doSoundGM
+				print_ts('\aySetting doSoundGM = '..tostring(doSoundGM))
+			end
+			save_settings()
+		end
 		-- distfar Color Distance
 		if cmd == 'distfar' and val_num > 0 then
 			settings[CharConfig]['distfar'] = val_num
@@ -1481,6 +1582,13 @@ local load_binds = function()
 			print_ts('\t\ay/am reload\a-t -- Reload the ini file')
 			print_ts('\t\ay/am distmid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
 			print_ts('\t\ay/am distfar\a-t -- Sets the distnace the color changes from \a-oOrange \a-tto \a-rRed')
+			print_ts('\a-y- Sounds -')
+			print_ts('\t\ay/am dosound pc\a-t -- toggle PC custom sound alerts')
+			print_ts('\t\ay/am dosound npc\a-t -- toggle NPC custom sound alerts')
+			print_ts('\t\ay/am dosound gm\a-t -- toggle GM custom sound alerts')
+			print_ts('\t\ay/am volpc 1-100\a-t -- Set PC custom sound Volume 1-100')
+			print_ts('\t\ay/am volnpc 1-100\a-t -- Set NPC custom sound Volume 1-100')
+			print_ts('\t\ay/am volgm 1-100\a-t -- Set GM custom sound Volume 1-100')
 			print_ts('\a-y- Ignore List -')
 			print_ts('\t\ay/am ignoreadd pcname\a-t -- add pc to the ignore list')
 			print_ts('\t\ay/am ignoredel pcname\a-t -- delete pc from the ignore list')
@@ -1599,8 +1707,16 @@ local check_for_gms = function()
 				if tGMs[name] == nil then
 					tGMs[name] = v
 					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the zone. '..v.distance..' units away.')
+					if doSoundGM then
+						setVolume(volGM)
+						playSound(soundGM)
+					end
 					elseif (remind ~= nil and remind > 0) and tGMs[name] ~= nil and os.difftime(os.time(), tGMs[name].time) > remind then
 					tGMs[name].time = v.time
+					if doSoundGM then
+						setVolume(volGM)
+						playSound(soundGM)
+					end
 					print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
 				end
 			end
@@ -1625,9 +1741,17 @@ local check_for_pcs = function()
 				if tPlayers[name] == nil then
 					tPlayers[name] = v
 					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the alert radius. '..v.distance..' units away.')
+					if doSoundPC then
+						setVolume(volPC)
+						playSound(soundPC)
+					end
 					-- run commands here
 					elseif (remind ~= nil and remind > 0) and tPlayers[name] ~= nil and os.difftime(os.time(), tPlayers[name].time) > remind then
 					tPlayers[name].time = v.time
+					if doSoundPC then
+						setVolume(volPC)
+						playSound(soundPC)
+					end
 					print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
 					run_char_commands()
 				end
@@ -1662,7 +1786,7 @@ local check_for_spawns = function()
 			end
 			importZone = false
 			if counter > 0 then
-				printf('\aw[\atAlertMaster\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter)
+				printf('\aw[\atAlert Master\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter)
 			end
 		end
 		if tmp ~= nil then
@@ -1702,7 +1826,13 @@ local check_for_spawns = function()
 						if not AlertWindowOpen then DrawAlertGUI() end
 					end
 					alertTime = os.time()
-					if doBeep then CMD('/beep') end
+					if doBeep then
+						if doSoundNPC then
+							setVolume(volNPC)
+							playSound(soundNPC)
+						else
+							CMD('/beep') end
+						end
 				end
 				else
 				AlertWindow_Show = false
@@ -1779,7 +1909,14 @@ local loop = function()
 					print_ts(GetCharZone()..'\ag'..cleanName..'\ax spawn alert! '..distance..' units away.')
 				end
 				--do beep alerts
-				if doBeep then CMD('/beep') end
+				if doBeep then 
+					if doSoundNPC then
+						setVolume(volNPC)
+						playSound(soundNPC)
+					else
+						CMD('/beep')
+					end
+				end
 				--do popup alerts
 				if (AlertWindow_Show == false) then
 					if doAlert then
