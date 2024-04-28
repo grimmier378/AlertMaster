@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '1.93'
+local amVer = '2.01'
 local CMD = mq.cmd
 local CMDF = mq.cmdf
 local TLO = mq.TLO
@@ -177,17 +177,17 @@ local flags = SND_FILENAME + SND_ASYNC
 local function playSound(name)
 	local filename = soundsPath..name
 	winmm.sndPlaySoundA(filename, flags)
- end
- 
- -- Function to set volume (affects all sounds globally)
- local function setVolume(volume)
+end
+
+-- Function to set volume (affects all sounds globally)
+local function setVolume(volume)
 	if volume < 0 or volume > 100 then
 		error("Volume must be between 0 and 100")
 	end
 	local vol = math.floor(volume / 100 * 0xFFFF)
 	local leftRightVolume = bit32.bor(bit32.lshift(vol, 16), vol) -- Set both left and right volume
 	winmm.waveOutSetVolume(nil, leftRightVolume)
- end
+end
 -- helpers
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', TLO.Time()) end
 
@@ -486,8 +486,9 @@ local function RefreshUnhandled()
 	for k,v in ipairs(Table_Cache.Rules) do
 		local found = 0
 		for _,search in ipairs(splitSearch) do
-			if string.find(string.lower(v.MobName), string.lower(search)) then found = found + 1 end
-			if string.find(v.MobDirtyName, search) then found = found + 1 end
+			if string.find(string.lower(v.MobName), string.lower(search)) or string.find(v.MobDirtyName, search) then
+				found = found + 1
+			end
 		end
 		if #splitSearch == found then table.insert(newTable, v) end
 	end
