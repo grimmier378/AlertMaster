@@ -82,7 +82,7 @@ function LIP.loadSM(fileName)
 			data[section] = data[section] or {};
 		end
 		local param, value = line:match("^([%w|_'.%s-]+)=%s-(.+)$");
-		if(param ~= 'OnSpawnCommand' and string.lower(param) ~= 'enabled' and param ~= nil and value ~= nil)then
+		if(param ~= 'OnSpawnCommand' and param ~= 'Enabled' and param ~= nil and value ~= nil)then
 			data[section][param] = value;
 		end
 	end

@@ -43,6 +43,7 @@ local smSettings = mq.configDir ..'/MQ2SpawnMaster.ini'
 local config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
 local settings_file = '/config/AlertMaster.ini'
 local settings_path = config_dir..settings_file
+local smImportList = mq.configDir..'/am_imports.lua'
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
@@ -57,7 +58,7 @@ local volNPC, volGM, volPC = 100, 100, 100
 local soundGM = 'GM.wav'
 local soundNPC = 'NPC.wav'
 local soundPC = 'PC.wav'
-local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC = false, false, false, false, false, false, false, false
+local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC, forceImport = false, false, false, false, false, false, false, false, false
 local delay, remind, pcs, spawns, gms, announce, ignoreguild, radius, zradius, remindNPC, showAggro = 1, 30, true, true, true, false, true, 100, 100, 5, true
 -- [[ UI ]] --
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
@@ -71,7 +72,7 @@ local themeFile = mq.configDir .. '/MyThemeZ.lua'
 local ZoomLvl = 1.0
 local doOnce = true
 local ColorCountAlert, ColorCountConf, ColorCount, StyleCount, StyleCountConf, StyleCountAlert = 0, 0, 0, 0, 0, 0
-
+local importedZones = {}
 ---@class
 local DistColorRanges = {
 	orange = 600, -- distance the color changes from green to orange
@@ -298,9 +299,11 @@ local function import_spawnmaster(val)
 				return false
 			end
 		end
+		importedZones[zoneShort] = true
 		-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
 		settings[zoneShort]['Spawn'..getTableSize(settings[zoneShort])+1] = val_str
 		save_settings()
+		mq.pickle(smImportList, importedZones)
 		return true
 	end
 end
@@ -326,6 +329,10 @@ local function load_settings()
 		spawnsSpawnMaster = LIP.loadSM(smSettings)
 		haveSM = true
 		importZone = true
+	end
+
+	if File_Exists(smImportList) then
+		importedZones = dofile(smImportList)
 	end
 
 	useThemeName = theme.LoadTheme
@@ -637,6 +644,271 @@ local function RefreshZone()
 end
 
 -----------------------
+
+---@param spawn MQSpawn
+local should_include_player = function(spawn)
+	local name = spawn.DisplayName()
+	local guild = spawn.Guild()
+	-- if pc exists on the ignore list, skip
+	if settings['Ignore'] ~= nil then
+		for k, v in pairs(settings['Ignore']) do
+			if v == name then return false end
+		end
+	end
+	-- if pc is in group, raid or (optionally) guild, skip
+	local in_group = Group.Members() ~= nil and Group.Member(name).Index() ~= nil
+	local in_raid = Raid.Members() > 0 and Raid.Member(name)() ~= nil
+	local in_guild = ignoreguild and ME.Guild() ~= nil and ME.Guild() == guild
+	if in_group or in_raid or in_guild then return false end
+	return true
+end
+
+local run_char_commands = function()
+	if settings[CharCommands] ~= nil then
+		for k, cmd in pairs(settings[CharCommands]) do CMD.docommand(cmd) end
+	end
+end
+
+local spawn_search_players = function(search)
+	local tmp = {}
+	local cnt = SpawnCount(search)()
+	if cnt ~= nil or cnt > 0 then
+		for i = 1, cnt do
+			local pc = NearestSpawn(i,search)
+			if pc ~= nil and pc.DisplayName() ~= nil then
+				local name = pc.DisplayName()
+				local guild = pc.Guild() or 'No Guild'
+				if should_include_player(pc) then
+					tmp[name] = {
+						name = (pc.GM() and '\ag*GM*\ax ' or '')..'\ar'..name..'\ax',
+						guild = '<\ay'..guild..'\ax>',
+						distance = math.floor(pc.Distance() or 0),
+						time = os.time()
+					}
+				end
+			end
+		end
+	end
+	return tmp
+end
+
+local spawn_search_npcs = function()
+	local tmp = {}
+	local spawns = settings[Zone.ShortName()]
+	if spawns ~= nil then
+		for k, v in pairs(spawns) do
+			local search = 'npc '..v
+			local cnt = SpawnCount(search)()
+			for i = 1, cnt do
+				local spawn = NearestSpawn(i, search)
+				local id = spawn.ID()
+				if spawn ~= nil and id ~= nil then
+					-- Case-sensitive comparison using CleanName for exact matching
+					if spawn.DisplayName() == v or spawn.Name() == v then
+						tmp[id] = spawn
+					end
+				end
+			end
+		end
+	end
+	return tmp
+end
+
+local check_for_gms = function()
+	if active and gms then
+		local tmp = spawn_search_players('gm')
+		if tmp ~= nil then
+			for name, v in pairs(tmp) do
+				if tGMs[name] == nil then
+					tGMs[name] = v
+					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the zone. '..v.distance..' units away.')
+					if doSoundGM then
+						setVolume(volGM)
+						playSound(soundGM)
+					end
+					elseif (remind ~= nil and remind > 0) and tGMs[name] ~= nil and os.difftime(os.time(), tGMs[name].time) > remind then
+					tGMs[name].time = v.time
+					if doSoundGM then
+						setVolume(volGM)
+						playSound(soundGM)
+					end
+					print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
+				end
+			end
+			if tGMs ~= nil then
+				for name, v in pairs(tGMs) do
+					if tmp[name] == nil then
+						tGMs[name] = nil
+						print_ts(GetCharZone()..v.name..' left the zone.')
+					end
+				end
+			end
+		end
+	end
+end
+
+local check_for_pcs = function()
+	if active and pcs then
+		local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..ME.ID())
+		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		if tmp ~= nil then
+			for name, v in pairs(tmp) do
+				if tPlayers[name] == nil then
+					tPlayers[name] = v
+					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the alert radius. '..v.distance..' units away.')
+					if doSoundPC then
+						setVolume(volPC)
+						playSound(soundPC)
+					end
+					-- run commands here
+					elseif (remind ~= nil and remind > 0) and tPlayers[name] ~= nil and os.difftime(os.time(), tPlayers[name].time) > remind then
+					tPlayers[name].time = v.time
+					if doSoundPC then
+						setVolume(volPC)
+						playSound(soundPC)
+					end
+					print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
+					run_char_commands()
+				end
+			end
+			if tPlayers ~= nil then
+				for name, v in pairs(tPlayers) do
+					if tmp[name] == nil then
+						tPlayers[name] = nil
+						print_ts(GetCharZone()..v.name..' left the alert radius.')
+					end
+				end
+			end
+		end
+	end
+end
+
+local check_for_spawns = function()
+	if active and spawns then
+		local tmp = spawn_search_npcs()
+		local spawnAlertsUpdated, tableUpdate = false, false
+		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		if haveSM and (importZone or forceImport) then
+			local counter = 0
+			local tmpSpawnMaster = {}
+			-- Check for Long Name
+			if importedZones[Zone.ShortName():lower()] == nil or forceImport then
+				if spawnsSpawnMaster[Zone.Name():lower()] ~= nil then
+					tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()]
+					for k, v in pairs(tmpSpawnMaster) do
+						if import_spawnmaster(v) then
+							counter = counter + 1
+						end
+					end
+				end
+				-- Check for Short Name
+				if spawnsSpawnMaster[Zone.ShortName():lower()] ~= nil  then
+					tmpSpawnMaster = spawnsSpawnMaster[Zone.ShortName():lower()]
+					for k, v in pairs(tmpSpawnMaster) do
+						if import_spawnmaster(v) then
+							counter = counter + 1
+						end
+					end
+				end
+				importZone = false
+				forceImport = false
+			end
+			if counter > 0 then
+				printf('\aw[\atAlert Master\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter)
+			end
+		end
+		if tmp ~= nil then
+			for id, v in pairs(tmp) do
+				if tSpawns[id] == nil then
+					if check_safe_zone() ~= true then
+						print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
+						spawnAlertsUpdated = true
+					end
+					tableUpdate = true
+					tSpawns[id] = v
+					spawnAlerts[id] = v
+					numAlerts = numAlerts + 1
+				end
+			end
+			if tSpawns ~= nil then
+				for id, v in pairs(tSpawns) do
+					if tmp[id] == nil then
+						if check_safe_zone() ~= true then
+							print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax was killed or despawned.')
+							spawnAlertsUpdated = false
+						end
+						tableUpdate = true
+						tSpawns[id] = nil
+						spawnAlerts[id] = nil
+						numAlerts = numAlerts - 1
+					end
+				end
+				else
+				AlertWindow_Show = false
+				AlertWindowOpen = false
+			end
+			-- Check if there are any entries in the spawnAlerts table
+			if next(spawnAlerts) ~= nil then
+				if tableUpdate or doOnce then RefreshAlerts() end
+				if spawnAlertsUpdated then
+					if doAlert then
+						AlertWindow_Show = true
+						AlertWindowOpen = true
+						if not AlertWindowOpen then DrawAlertGUI() end
+					end
+					alertTime = os.time()
+					if doBeep or doSoundNPC then
+						if doSoundNPC then
+							setVolume(volNPC)
+							playSound(soundNPC)
+						else
+							CMD('/beep')
+						end
+					end
+				end
+				else
+				AlertWindow_Show = false
+				AlertWindowOpen = false
+			end
+		end
+	end
+end
+
+local check_for_announce = function()
+	if active and announce then
+		local tmp = spawn_search_players('pc notid '..ME.ID())
+		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		if tmp ~= nil then
+			for name, v in pairs(tmp) do
+				if tAnnounce[name] == nil then
+					tAnnounce[name] = v
+					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the zone.')
+				end
+			end
+			if tAnnounce ~= nil then
+				for name, v in pairs(tAnnounce) do
+					if tmp[name] == nil then
+						tAnnounce[name] = nil
+						print_ts(GetCharZone()..v.name..' left the zone.')
+					end
+				end
+			end
+		end
+	end
+end
+
+local check_for_zone_change = function()
+	-- if we've changed zones, clear the tables and update current zone id
+	if active and (zone_id == nil or zone_id ~= Zone.ID()) then
+		AlertWindowOpen, AlertWindow_Show = false, false
+		tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Alerts, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}, {}
+		zone_id = Zone.ID()
+		alertTime = os.time()
+		doOnce = true
+		if haveSM then importZone = true end
+	end
+end
+-------- GUI STUFF ------------
 
 local function directions(heading)
 	-- convert headings from letter values to degrees
@@ -1008,7 +1280,9 @@ local function DrawSearchWindow()
 		-- next row
 		if ImGui.Button(Zone.Name(), 160,0.0) then
 			currentTab = "zone"
+			forceImport = true
 			RefreshZone()
+			check_for_spawns()
 		end
 		if ImGui.IsItemHovered() and showTooltips then
 			ImGui.BeginTooltip()
@@ -1905,267 +2179,6 @@ local setup = function()
 	print_ts('\ay/am help for usage')
 	print_status()
 	RefreshZone()
-end
-
----@param spawn MQSpawn
-local should_include_player = function(spawn)
-	local name = spawn.DisplayName()
-	local guild = spawn.Guild()
-	-- if pc exists on the ignore list, skip
-	if settings['Ignore'] ~= nil then
-		for k, v in pairs(settings['Ignore']) do
-			if v == name then return false end
-		end
-	end
-	-- if pc is in group, raid or (optionally) guild, skip
-	local in_group = Group.Members() ~= nil and Group.Member(name).Index() ~= nil
-	local in_raid = Raid.Members() > 0 and Raid.Member(name)() ~= nil
-	local in_guild = ignoreguild and ME.Guild() ~= nil and ME.Guild() == guild
-	if in_group or in_raid or in_guild then return false end
-	return true
-end
-
-local run_char_commands = function()
-	if settings[CharCommands] ~= nil then
-		for k, cmd in pairs(settings[CharCommands]) do CMD.docommand(cmd) end
-	end
-end
-
-local spawn_search_players = function(search)
-	local tmp = {}
-	local cnt = SpawnCount(search)()
-	if cnt ~= nil or cnt > 0 then
-		for i = 1, cnt do
-			local pc = NearestSpawn(i,search)
-			if pc ~= nil and pc.DisplayName() ~= nil then
-				local name = pc.DisplayName()
-				local guild = pc.Guild() or 'No Guild'
-				if should_include_player(pc) then
-					tmp[name] = {
-						name = (pc.GM() and '\ag*GM*\ax ' or '')..'\ar'..name..'\ax',
-						guild = '<\ay'..guild..'\ax>',
-						distance = math.floor(pc.Distance() or 0),
-						time = os.time()
-					}
-				end
-			end
-		end
-	end
-	return tmp
-end
-
-local spawn_search_npcs = function()
-	local tmp = {}
-	local spawns = settings[Zone.ShortName()]
-	if spawns ~= nil then
-		for k, v in pairs(spawns) do
-			local search = 'npc '..v
-			local cnt = SpawnCount(search)()
-			for i = 1, cnt do
-				local spawn = NearestSpawn(i, search)
-				local id = spawn.ID()
-				if spawn ~= nil and id ~= nil then
-					-- Case-sensitive comparison using CleanName for exact matching
-					if spawn.DisplayName() == v or spawn.Name() == v then
-						tmp[id] = spawn
-					end
-				end
-			end
-		end
-	end
-	return tmp
-end
-
-local check_for_gms = function()
-	if active and gms then
-		local tmp = spawn_search_players('gm')
-		if tmp ~= nil then
-			for name, v in pairs(tmp) do
-				if tGMs[name] == nil then
-					tGMs[name] = v
-					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the zone. '..v.distance..' units away.')
-					if doSoundGM then
-						setVolume(volGM)
-						playSound(soundGM)
-					end
-					elseif (remind ~= nil and remind > 0) and tGMs[name] ~= nil and os.difftime(os.time(), tGMs[name].time) > remind then
-					tGMs[name].time = v.time
-					if doSoundGM then
-						setVolume(volGM)
-						playSound(soundGM)
-					end
-					print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
-				end
-			end
-			if tGMs ~= nil then
-				for name, v in pairs(tGMs) do
-					if tmp[name] == nil then
-						tGMs[name] = nil
-						print_ts(GetCharZone()..v.name..' left the zone.')
-					end
-				end
-			end
-		end
-	end
-end
-
-local check_for_pcs = function()
-	if active and pcs then
-		local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..ME.ID())
-		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
-		if tmp ~= nil then
-			for name, v in pairs(tmp) do
-				if tPlayers[name] == nil then
-					tPlayers[name] = v
-					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the alert radius. '..v.distance..' units away.')
-					if doSoundPC then
-						setVolume(volPC)
-						playSound(soundPC)
-					end
-					-- run commands here
-					elseif (remind ~= nil and remind > 0) and tPlayers[name] ~= nil and os.difftime(os.time(), tPlayers[name].time) > remind then
-					tPlayers[name].time = v.time
-					if doSoundPC then
-						setVolume(volPC)
-						playSound(soundPC)
-					end
-					print_ts(GetCharZone()..v.name..' loitering ' ..v.distance.. ' units away.')
-					run_char_commands()
-				end
-			end
-			if tPlayers ~= nil then
-				for name, v in pairs(tPlayers) do
-					if tmp[name] == nil then
-						tPlayers[name] = nil
-						print_ts(GetCharZone()..v.name..' left the alert radius.')
-					end
-				end
-			end
-		end
-	end
-end
-
-local check_for_spawns = function()
-	if active and spawns then
-		local tmp = spawn_search_npcs()
-		local spawnAlertsUpdated, tableUpdate = false, false
-		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
-		if haveSM and importZone then
-			local counter = 0
-			local tmpSpawnMaster = {}
-			-- Check for Long Name
-			if spawnsSpawnMaster[Zone.Name():lower()] ~= nil then
-				tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()]
-				for k, v in pairs(tmpSpawnMaster) do
-					if import_spawnmaster(v) then
-						counter = counter + 1
-					end
-				end
-			end
-			-- Check for Short Name
-			if spawnsSpawnMaster[Zone.ShortName():lower()] ~= nil  then
-				tmpSpawnMaster = spawnsSpawnMaster[Zone.ShortName():lower()]
-				for k, v in pairs(tmpSpawnMaster) do
-					if import_spawnmaster(v) then
-						counter = counter + 1
-					end
-				end
-			end
-			importZone = false
-			if counter > 0 then
-				printf('\aw[\atAlert Master\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter)
-			end
-		end
-		if tmp ~= nil then
-			for id, v in pairs(tmp) do
-				if tSpawns[id] == nil then
-					if check_safe_zone() ~= true then
-						print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
-						spawnAlertsUpdated = true
-					end
-					tableUpdate = true
-					tSpawns[id] = v
-					spawnAlerts[id] = v
-					numAlerts = numAlerts + 1
-				end
-			end
-			if tSpawns ~= nil then
-				for id, v in pairs(tSpawns) do
-					if tmp[id] == nil then
-						if check_safe_zone() ~= true then
-							print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax was killed or despawned.')
-							spawnAlertsUpdated = false
-						end
-						tableUpdate = true
-						tSpawns[id] = nil
-						spawnAlerts[id] = nil
-						numAlerts = numAlerts - 1
-					end
-				end
-				else
-				AlertWindow_Show = false
-				AlertWindowOpen = false
-			end
-			-- Check if there are any entries in the spawnAlerts table
-			if next(spawnAlerts) ~= nil then
-				if tableUpdate or doOnce then RefreshAlerts() end
-				if spawnAlertsUpdated then
-					if doAlert then
-						AlertWindow_Show = true
-						AlertWindowOpen = true
-						if not AlertWindowOpen then DrawAlertGUI() end
-					end
-					alertTime = os.time()
-					if doBeep or doSoundNPC then
-						if doSoundNPC then
-							setVolume(volNPC)
-							playSound(soundNPC)
-						else
-							CMD('/beep')
-						end
-					end
-				end
-				else
-				AlertWindow_Show = false
-				AlertWindowOpen = false
-			end
-		end
-	end
-end
-
-local check_for_announce = function()
-	if active and announce then
-		local tmp = spawn_search_players('pc notid '..ME.ID())
-		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
-		if tmp ~= nil then
-			for name, v in pairs(tmp) do
-				if tAnnounce[name] == nil then
-					tAnnounce[name] = v
-					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the zone.')
-				end
-			end
-			if tAnnounce ~= nil then
-				for name, v in pairs(tAnnounce) do
-					if tmp[name] == nil then
-						tAnnounce[name] = nil
-						print_ts(GetCharZone()..v.name..' left the zone.')
-					end
-				end
-			end
-		end
-	end
-end
-
-local check_for_zone_change = function()
-	-- if we've changed zones, clear the tables and update current zone id
-	if active and (zone_id == nil or zone_id ~= Zone.ID()) then
-		AlertWindowOpen, AlertWindow_Show = false, false
-		tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Alerts, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}, {}
-		zone_id = Zone.ID()
-		alertTime = os.time()
-		doOnce = true
-		if haveSM then importZone = true end
-	end
 end
 
 local loop = function()
