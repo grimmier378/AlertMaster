@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '2.04'
+local amVer = '2.05'
 local CMD = mq.cmd
 local CMDF = mq.cmdf
 local TLO = mq.TLO
@@ -86,7 +86,6 @@ local Table_Cache = {
 }
 
 local xTarTable = {}
-local alertFlags = bit32.bor(ImGuiWindowFlags.NoCollapse)
 local spawnListFlags = bit32.bor(
 	ImGuiTableFlags.Resizable,
 	ImGuiTableFlags.Sortable,
@@ -167,10 +166,7 @@ local GUI_Alert = {
 	Open  = false,
 	Show  = false,
 	Locked = false,
-	Flags = bit32.bor(
-		ImGuiWindowFlags.None,
-		ImGuiWindowFlags.MenuBar
-	),
+	Flags = bit32.bor(ImGuiWindowFlags.NoCollapse),
 	Refresh = {
 		Sort = {
 			Rules     = true,
@@ -1454,7 +1450,7 @@ function DrawAlertGUI() -- Draw GUI Window
 		if ME.Zoning() then return end
 		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		ColorCountAlert, StyleCountAlert = DrawTheme(useThemeName)
-		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, alertFlags)
+		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, GUI_Alert.Flags)
 		if not opened then
 			AlertWindowOpen = false
 			AlertWindow_Show = false
@@ -2057,8 +2053,18 @@ local check_for_spawns = function()
 		if haveSM and importZone then
 			local counter = 0
 			local tmpSpawnMaster = {}
+			-- Check for Long Name
 			if spawnsSpawnMaster[Zone.Name():lower()] ~= nil then
 				tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()]
+				for k, v in pairs(tmpSpawnMaster) do
+					if import_spawnmaster(v) then
+						counter = counter + 1
+					end
+				end
+			end
+			-- Check for Short Name
+			if spawnsSpawnMaster[Zone.ShortName():lower()] ~= nil  then
+				tmpSpawnMaster = spawnsSpawnMaster[Zone.ShortName():lower()]
 				for k, v in pairs(tmpSpawnMaster) do
 					if import_spawnmaster(v) then
 						counter = counter + 1
