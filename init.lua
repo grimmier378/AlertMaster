@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '2.05'
+local amVer = '2.06'
 local CMD = mq.cmd
 local CMDF = mq.cmdf
 local TLO = mq.TLO
@@ -1280,9 +1280,7 @@ local function DrawSearchWindow()
 		-- next row
 		if ImGui.Button(Zone.Name(), 160,0.0) then
 			currentTab = "zone"
-			forceImport = true
-			RefreshZone()
-			check_for_spawns()
+			RefreshZone()			
 		end
 		if ImGui.IsItemHovered() and showTooltips then
 			ImGui.BeginTooltip()
@@ -1363,6 +1361,7 @@ local function DrawSearchWindow()
 			-- Tab for NPC List
 			local npcs = settings[Zone.ShortName()] or {}
 			local changed
+			ImGui.SetNextItemWidth(160)
 			newSpawnName, changed = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
 			if ImGui.IsItemHovered() and showTooltips then
 				ImGui.BeginTooltip()
@@ -1380,6 +1379,13 @@ local function DrawSearchWindow()
 				ImGui.BeginTooltip()
 				ImGui.Text("Add to SpawnList")
 				ImGui.EndTooltip()
+			end
+			ImGui.SameLine()
+			if haveSM then
+				if ImGui.Button('Import Zone##ImportSM') then
+					forceImport = true
+					check_for_spawns()
+				end
 			end
 			-- Populate and sort sortedNpcs right before using it
 			local sortedNpcs = {}
