@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '2.01'
+local amVer = '2.04'
 local CMD = mq.cmd
 local CMDF = mq.cmdf
 local TLO = mq.TLO
@@ -40,6 +40,9 @@ local ME = TLO.Me
 local SpawnCount = TLO.SpawnCount
 local NearestSpawn = TLO.NearestSpawn
 local smSettings = mq.configDir ..'/MQ2SpawnMaster.ini'
+local config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
+local settings_file = '/config/AlertMaster.ini'
+local settings_path = config_dir..settings_file
 local Group = TLO.Group
 local Raid = TLO.Raid
 local Zone = TLO.Zone
@@ -48,7 +51,7 @@ local angle = 0
 local CharConfig = 'Char_'..ME.DisplayName()..'_Config'
 local CharCommands = 'Char_'..ME.DisplayName()..'_Commands'
 local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
-local tSafeZones, spawnAlerts, spawnsSpawnMaster = {}, {}, {}
+local tSafeZones, spawnAlerts, spawnsSpawnMaster, settings = {}, {}, {}, {}
 local alertTime, numAlerts = 0,0
 local volNPC, volGM, volPC = 100, 100, 100
 local soundGM = 'GM.wav'
@@ -66,6 +69,7 @@ local useThemeName = 'Default'
 local openConfigGUI = false
 local themeFile = mq.configDir .. '/MyThemeZ.lua'
 local ZoomLvl = 1.0
+local doOnce = true
 local ColorCountAlert, ColorCountConf, ColorCount, StyleCount, StyleCountConf, StyleCountAlert = 0, 0, 0, 0, 0, 0
 
 ---@class
@@ -78,6 +82,7 @@ local Table_Cache = {
 	Rules = {},
 	Unhandled = {},
 	Mobs = {},
+	Alerts = {},
 }
 
 local xTarTable = {}
@@ -158,6 +163,58 @@ local GUI_Main = {
 	},
 }
 
+local GUI_Alert = {
+	Open  = false,
+	Show  = false,
+	Locked = false,
+	Flags = bit32.bor(
+		ImGuiWindowFlags.None,
+		ImGuiWindowFlags.MenuBar
+	),
+	Refresh = {
+		Sort = {
+			Rules     = true,
+			Filtered  = true,
+			Unhandled = true,
+			Mobs = false,
+			Alerts = true,
+		},
+		Table = {
+			Rules     = true,
+			Filtered  = true,
+			Unhandled = true,
+			Mobs = false,
+			Alerts = true,
+		},
+	},
+	Table = {
+		Column_ID = {
+			ID          = 1,
+			MobName     = 2,
+			MobDist     = 3,
+			MobID       = 4,
+			MobDirection = 5,
+		},
+		Flags = bit32.bor(
+			ImGuiTableFlags.Resizable,
+			ImGuiTableFlags.Sortable,
+			ImGuiTableFlags.SizingFixedFit,
+			ImGuiTableFlags.BordersV,
+			ImGuiTableFlags.BordersOuter,
+			ImGuiTableFlags.Reorderable,
+			ImGuiTableFlags.ScrollY,
+			ImGuiTableFlags.ScrollX,
+			ImGuiTableFlags.Hideable
+		),
+		SortSpecs = {
+			Rules     = nil,
+			Unhandled = nil,
+			Filtered = nil,
+			Mobs = nil,
+			Alerts = nil,
+		},
+	},
+}
 ------- Sounds ----------
 local ffi = require("ffi")
 local soundsPath = mq.TLO.Lua.Dir().."\\alertmaster\\sounds\\"
@@ -253,9 +310,7 @@ local function import_spawnmaster(val)
 end
 
 local function load_settings()
-	config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
-	settings_file = '/config/AlertMaster.ini'
-	settings_path = config_dir..settings_file
+
 
 	if File_Exists(settings_path) then
 		settings = LIP.load(settings_path)
@@ -478,6 +533,42 @@ local function TableSortSpecs(a, b)
 	return a.MobName < b.MobName
 end
 
+local function AlertTableSortSpecs(a, b)
+    for i = 1, GUI_Alert.Table.SortSpecs.SpecsCount do
+        local spec = GUI_Alert.Table.SortSpecs:Specs(i)
+        local delta = 0
+        if spec.ColumnUserID == GUI_Alert.Table.Column_ID.MobName then
+            if a.MobName and b.MobName then
+                if a.MobName < b.MobName then
+                    delta = -1
+                elseif a.MobName > b.MobName then
+                    delta = 1
+                end
+            else
+                return 0
+            end
+        elseif spec.ColumnUserID == GUI_Alert.Table.Column_ID.MobDist then
+            if a.MobDist and b.MobDist then
+                if a.MobDist < b.MobDist then
+                    delta = -1
+                elseif a.MobDist > b.MobDist then
+                    delta = 1
+                end
+            else
+                return 0
+            end
+        end
+        if delta ~= 0 then
+            if spec.SortDirection == ImGuiSortDirection.Ascending then
+                return delta < 0
+            else
+                return delta > 0
+            end
+        end
+    end
+    return a.MobName < b.MobName  -- Default fallback to sorting by name
+end
+
 local function RefreshUnhandled()
 	local splitSearch = {}
 	for part in string.gmatch(GUI_Main.Search, '[^%s]+') do
@@ -496,6 +587,24 @@ local function RefreshUnhandled()
 	Table_Cache.Unhandled = newTable
 	GUI_Main.Refresh.Sort.Rules = true
 	GUI_Main.Refresh.Table.Unhandled = true
+end
+
+local function RefreshAlerts()
+	local tmp = {}
+	local z = 1
+	doOnce = false
+	for k, v in pairs(spawnAlerts) do
+		tmp[z] = v
+		z = z + 1
+	end
+	local newTable = {}
+	for i = 1, #tmp do
+	local spawn = tmp[i]
+	if #tmp > 0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
+	end
+	Table_Cache.Alerts = newTable
+	GUI_Alert.Refresh.Sort.Alerts = true
+	GUI_Alert.Refresh.Table.Alerts = false
 end
 
 local function RefreshZone()
@@ -844,6 +953,39 @@ local function DrawRuleRow(entry)
 	ImGui.TableNextColumn()
 end
 
+local function DrawAlertRuleRow(entry)
+	local sHeadingTo = entry.MobDirection
+
+	ImGui.TableSetColumnIndex(0)
+	ImGui.PushStyleColor(ImGuiCol.Text,COLOR.color('green'))
+	ImGui.Text(entry.MobName)
+	ImGui.PopStyleColor(1)
+	if ImGui.IsItemHovered() and showTooltips then
+		ImGui.BeginTooltip()
+		ImGui.Text("Right-Click to Navigate: "..entry.MobName.."\nCtrl+Right-Click to Group Navigate: "..entry.MobName)
+		ImGui.EndTooltip()
+	end
+		if ImGui.IsItemHovered() then
+			if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
+				CMDF('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s',groupCmd,entry.MobID)
+			elseif
+				ImGui.IsMouseReleased(1) then
+				CMDF('/nav id %s',entry.MobID)
+			end
+		end
+	ImGui.TableSetColumnIndex(1)
+	local distance = entry.MobDist
+	ImGui.PushStyleColor(ImGuiCol.Text,ColorDistance(distance))
+	ImGui.Text('\t'..tostring(distance))
+	ImGui.PopStyleColor()
+	ImGui.TableSetColumnIndex(2)
+	--if DoDrawArrow then
+		angle = getRelativeDirection(sHeadingTo) or 0
+		local cursorScreenPos = ImGui.GetCursorScreenPosVec()
+		DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
+	--end
+end
+
 local function DrawSearchWindow()
 	if ME.Zoning() then return end
 	if GUI_Main.Locked then
@@ -1073,7 +1215,7 @@ local function Config_GUI(open)
 		ImGui.End()
 		return open
 	end
-	ImGui.SetNextItemWidth(200)
+
 	if ImGui.CollapsingHeader('Theme Settings##AlertMaster') then
 		ImGui.Text("Cur Theme: %s", useThemeName)
 		-- Combo Box Load Theme
@@ -1269,43 +1411,35 @@ end
 local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
-		if ImGui.BeginTable("AlertTable", 3,spawnListFlags) then
+		if ImGui.BeginTable("AlertTable", 3,GUI_Alert.Table.Flags) then
 			ImGui.TableSetupScrollFreeze(0, 1)
-			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
-			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort))
-			ImGui.TableSetupColumn("Dir", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort),90, GUI_Alert.Table.Column_ID.MobName)
+			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort),50, GUI_Alert.Table.Column_ID.MobDist)
+			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.NoSort), 30, GUI_Alert.Table.Column_ID.MobDirection)
 			ImGui.TableHeadersRow()
-			for id, spawnData in pairs(spawnAlerts) do
-				local sHeadingTo = TLO.Spawn(spawnData.ID).HeadingTo() or 0
-				ImGui.TableNextRow()
-				ImGui.TableSetColumnIndex(0)
-				ImGui.PushStyleColor(ImGuiCol.Text,COLOR.color('green'))
-				ImGui.Text(spawnData.DisplayName())
-				ImGui.PopStyleColor(1)
-				if ImGui.IsItemHovered() and showTooltips then
-					ImGui.BeginTooltip()
-					ImGui.Text("Right-Click to Navigate: "..spawnData.DisplayName().."\nCtrl+Right-Click to Group Navigate: "..spawnData.DisplayName())
-					ImGui.EndTooltip()
-				end
-					if ImGui.IsItemHovered() then
-						if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
-							CMDF('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s',groupCmd,spawnData.ID())
-						elseif
-							ImGui.IsMouseReleased(1) then
-							CMDF('/nav id %s',spawnData.ID())
-						end
+			local sortSpecsAlerts = ImGui.TableGetSortSpecs()
+			if not ME.Zoning() then
+				if sortSpecsAlerts and (sortSpecsAlerts.SpecsDirty or GUI_Alert.Refresh.Sort.Rules) then
+					if #Table_Cache.Alerts > 0 then
+						GUI_Alert.Table.SortSpecs = sortSpecsAlerts
+						table.sort(Table_Cache.Alerts, AlertTableSortSpecs)
+						GUI_Alert.Table.SortSpecs = nil
 					end
-				ImGui.TableSetColumnIndex(1)
-				local distance = math.floor(spawnData.Distance() or 0)
-				ImGui.PushStyleColor(ImGuiCol.Text,ColorDistance(distance))
-				ImGui.Text('\t'..tostring(distance))
-				ImGui.PopStyleColor()
-				ImGui.TableSetColumnIndex(2)
-				--if DoDrawArrow then
-					angle = getRelativeDirection(sHeadingTo) or 0
-					local cursorScreenPos = ImGui.GetCursorScreenPosVec()
-					DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
-				--end
+					sortSpecsAlerts.SpecsDirty = false
+					GUI_Alert.Refresh.Sort.Rules = false
+				end
+				local clipper = ImGuiListClipper.new()
+				clipper:Begin(#Table_Cache.Alerts)
+				while clipper:Step() do
+					for i = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do
+						local entry = Table_Cache.Alerts[i + 1]
+						ImGui.PushID(entry.ID)
+						ImGui.TableNextRow()
+						DrawAlertRuleRow(entry)
+						ImGui.PopID()
+					end
+				end
+				clipper:End()
 			end
 			ImGui.EndTable()
 		end
@@ -1918,7 +2052,7 @@ end
 local check_for_spawns = function()
 	if active and spawns then
 		local tmp = spawn_search_npcs()
-		local spawnAlertsUpdated = false
+		local spawnAlertsUpdated, tableUpdate = false, false
 		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
 		if haveSM and importZone then
 			local counter = 0
@@ -1943,9 +2077,10 @@ local check_for_spawns = function()
 						print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax spawn alert! '..tostring(math.floor(v.Distance() or 0))..' units away.')
 						spawnAlertsUpdated = true
 					end
+					tableUpdate = true
 					tSpawns[id] = v
 					spawnAlerts[id] = v
-					numAlerts =numAlerts + 1
+					numAlerts = numAlerts + 1
 				end
 			end
 			if tSpawns ~= nil then
@@ -1955,6 +2090,7 @@ local check_for_spawns = function()
 							print_ts(GetCharZone()..'\ag'..tostring(v.DisplayName())..'\ax was killed or despawned.')
 							spawnAlertsUpdated = false
 						end
+						tableUpdate = true
 						tSpawns[id] = nil
 						spawnAlerts[id] = nil
 						numAlerts = numAlerts - 1
@@ -1966,6 +2102,7 @@ local check_for_spawns = function()
 			end
 			-- Check if there are any entries in the spawnAlerts table
 			if next(spawnAlerts) ~= nil then
+				if tableUpdate or doOnce then RefreshAlerts() end
 				if spawnAlertsUpdated then
 					if doAlert then
 						AlertWindow_Show = true
@@ -2017,9 +2154,10 @@ local check_for_zone_change = function()
 	-- if we've changed zones, clear the tables and update current zone id
 	if active and (zone_id == nil or zone_id ~= Zone.ID()) then
 		AlertWindowOpen, AlertWindow_Show = false, false
-		tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}
+		tGMs, tAnnounce, tPlayers, tSpawns, spawnAlerts, Table_Cache.Unhandled, Table_Cache.Alerts, Table_Cache.Mobs, Table_Cache.Rules = {}, {}, {}, {}, {}, {}, {}, {}, {}
 		zone_id = Zone.ID()
 		alertTime = os.time()
+		doOnce = true
 		if haveSM then importZone = true end
 	end
 end
