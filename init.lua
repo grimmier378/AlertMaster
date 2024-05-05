@@ -92,7 +92,7 @@ local xTarTable = {}
 local spawnListFlags = bit32.bor(
 	ImGuiTableFlags.Resizable,
 	ImGuiTableFlags.Sortable,
-	ImGuiTableFlags.SizingFixedFit,
+	-- ImGuiTableFlags.SizingFixedFit,
 	ImGuiTableFlags.BordersV,
 	ImGuiTableFlags.BordersOuter,
 	ImGuiTableFlags.Reorderable,
@@ -1324,7 +1324,7 @@ local function DrawSearchWindow()
 			end
 			ImGui.Separator()
 			local sizeX = ImGui.GetContentRegionAvail() - 4
-			if ImGui.BeginTable('##RulesTable', 8,sizeX,0.0, GUI_Main.Table.Flags) then
+			if ImGui.BeginTable('##RulesTable', 8, GUI_Main.Table.Flags) then
 				ImGui.TableSetupScrollFreeze(0, 1)
 				ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
 				ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName)
@@ -1333,7 +1333,7 @@ local function DrawSearchWindow()
 				ImGui.TableSetupColumn("Aggro", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobAggro)
 				ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobID)
 				ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, GUI_Main.Table.Column_ID.MobLoc)
-				ImGui.TableSetupColumn(Icons.FA_COMPASS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.MobDirection)
+				ImGui.TableSetupColumn(Icons.FA_COMPASS, bit32.bor(ImGuiTableColumnFlags.NoResize,ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.WidthFixed), 15, GUI_Main.Table.Column_ID.MobDirection)
 				ImGui.TableHeadersRow()
 				local sortSpecs = ImGui.TableGetSortSpecs()
 				if not ME.Zoning() then
@@ -1413,12 +1413,12 @@ local function DrawSearchWindow()
 			ImGui.SetWindowFontScale(ZoomLvl)
 			if next(sortedNpcs) ~= nil then
 				local sizeX = ImGui.GetContentRegionAvail() - 4
-				if ImGui.BeginTable("NPCListTable", 3, sizeX,0.0, spawnListFlags) then
+				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
 					-- Set up table headers
 					ImGui.TableSetupScrollFreeze(0, 1)
-					ImGui.TableSetupColumn("NPC Name")
-					ImGui.TableSetupColumn("Zone")
-					ImGui.TableSetupColumn(Icons.MD_DELETE)
+					ImGui.TableSetupColumn("NPC Name",ImGuiTableColumnFlags.None)
+					ImGui.TableSetupColumn("Zone",ImGuiTableColumnFlags.None)
+					ImGui.TableSetupColumn(Icons.MD_DELETE, bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.WidthFixed,15))
 					ImGui.TableHeadersRow()
 					for index, npc in ipairs(sortedNpcs) do
 						local spawnName = npc.name
@@ -1693,11 +1693,11 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
 		local sizeX = ImGui.GetContentRegionAvail() - 4
-		if ImGui.BeginTable("AlertTable", 3, sizeX, 0.0,GUI_Alert.Table.Flags) then
+		if ImGui.BeginTable("AlertTable", 3, GUI_Alert.Table.Flags) then
 			ImGui.TableSetupScrollFreeze(0, 1)
 			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.DefaultSort),90, GUI_Alert.Table.Column_ID.MobName)
 			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.DefaultSort),50, GUI_Alert.Table.Column_ID.MobDist)
-			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 30, GUI_Alert.Table.Column_ID.MobDirection)
+			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 30, GUI_Alert.Table.Column_ID.MobDirection)
 			ImGui.TableHeadersRow()
 			local sortSpecsAlerts = ImGui.TableGetSortSpecs()
 			if not ME.Zoning() then
