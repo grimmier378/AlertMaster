@@ -32,7 +32,7 @@ Icons = require('mq.ICONS')
 local COLOR = require('color.colors')
 -- Variables
 local arg = {...}
-local amVer = '2.06'
+local amVer = '2.07'
 local CMD = mq.cmd
 local CMDF = mq.cmdf
 local TLO = mq.TLO
@@ -53,15 +53,17 @@ local CharConfig = 'Char_'..ME.DisplayName()..'_Config'
 local CharCommands = 'Char_'..ME.DisplayName()..'_Commands'
 local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true , beep = false, popup = false, distmid = 600, distfar = 1200, locked = false}
 local tSafeZones, spawnAlerts, spawnsSpawnMaster, settings = {}, {}, {}, {}
+local npcs, tAnnounce, tPlayers, tSpawns, tGMs = {}, {}, {}, {}, {}
 local alertTime, numAlerts = 0,0
 local volNPC, volGM, volPC = 100, 100, 100
+local zone_id = Zone.ID() or 0
 local soundGM = 'GM.wav'
 local soundNPC = 'NPC.wav'
 local soundPC = 'PC.wav'
 local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC, forceImport = false, false, false, false, false, false, false, false, false
 local delay, remind, pcs, spawns, gms, announce, ignoreguild, radius, zradius, remindNPC, showAggro = 1, 30, true, true, true, false, true, 100, 100, 5, true
 -- [[ UI ]] --
-local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips= false, false, false, false, true
+local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips, active = false, false, false, false, true, false
 local currentTab = "zone"
 local newSpawnName = ''
 local zSettings = false
@@ -73,7 +75,7 @@ local ZoomLvl = 1.0
 local doOnce = true
 local ColorCountAlert, ColorCountConf, ColorCount, StyleCount, StyleCountConf, StyleCountAlert = 0, 0, 0, 0, 0, 0
 local importedZones = {}
----@class
+
 local DistColorRanges = {
 	orange = 600, -- distance the color changes from green to orange
 	red = 1200, -- distance the color changes from orange to red
@@ -292,16 +294,18 @@ local function import_spawnmaster(val)
 	local zoneShort = Zone.ShortName():lower()
 	local val_str = tostring(val):gsub("\"","")
 	if zoneShort ~= nil then
+		local count = 0
 		if settings[zoneShort] == nil then settings[zoneShort] = {} end
 		-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
 		for k, v in pairs(settings[zoneShort]) do
 			if string.find(string.lower(settings[zoneShort][k]), string.lower(val_str)) then
 				return false
 			end
+			count = count + 1
 		end
 		importedZones[zoneShort] = true
 		-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
-		settings[zoneShort]['Spawn'..getTableSize(settings[zoneShort])+1] = val_str
+		settings[zoneShort]['Spawn'..count+1] = val_str
 		save_settings()
 		mq.pickle(smImportList, importedZones)
 		return true
@@ -428,7 +432,7 @@ end
 local function SpawnToEntry(spawn, id, table)
 	local pAggro = 0
 	if table == xTarTable then
-		pAggro = tonumber(spawn.PctAggro() or 0)
+		pAggro = spawn.PctAggro() or 0
 	end
 	if spawn.ID() then
 		local entry = {
@@ -441,7 +445,7 @@ local function SpawnToEntry(spawn, id, table)
 			MobID = spawn.ID()or 0,
 			MobLvl = spawn.Level()or 0,
 			MobConColor = string.lower(spawn.ConColor() or 'white'),
-			MobAggro = pAggro,
+			MobAggro = pAggro or 0,
 			MobDirection = spawn.HeadingTo() or '0',
 			Enum_Action = 'unhandled',
 		}
@@ -665,7 +669,7 @@ end
 
 local run_char_commands = function()
 	if settings[CharCommands] ~= nil then
-		for k, cmd in pairs(settings[CharCommands]) do CMD.docommand(cmd) end
+		for k, cmd in pairs(settings[CharCommands]) do CMD(cmd) end
 	end
 end
 
@@ -1319,8 +1323,8 @@ local function DrawSearchWindow()
 				GUI_Main.Refresh.Table.Unhandled = true
 			end
 			ImGui.Separator()
-			
-			if ImGui.BeginTable('##RulesTable', 8, GUI_Main.Table.Flags) then
+			local sizeX = ImGui.GetContentRegionAvail() - 4
+			if ImGui.BeginTable('##RulesTable', 8,sizeX,0.0, GUI_Main.Table.Flags) then
 				ImGui.TableSetupScrollFreeze(0, 1)
 				ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
 				ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName)
@@ -1408,11 +1412,12 @@ local function DrawSearchWindow()
 			-- Now build the table with the sorted list
 			ImGui.SetWindowFontScale(ZoomLvl)
 			if next(sortedNpcs) ~= nil then
-				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
+				local sizeX = ImGui.GetContentRegionAvail() - 4
+				if ImGui.BeginTable("NPCListTable", 3, sizeX,0.0, spawnListFlags) then
 					-- Set up table headers
 					ImGui.TableSetupScrollFreeze(0, 1)
-					ImGui.TableSetupColumn("NPC Name", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
-					ImGui.TableSetupColumn("Zone", ImGuiTableColumnFlags.WidthAlwaysAutoResize)
+					ImGui.TableSetupColumn("NPC Name")
+					ImGui.TableSetupColumn("Zone")
 					ImGui.TableSetupColumn(Icons.MD_DELETE)
 					ImGui.TableHeadersRow()
 					for index, npc in ipairs(sortedNpcs) do
@@ -1687,11 +1692,12 @@ end
 local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
-		if ImGui.BeginTable("AlertTable", 3,GUI_Alert.Table.Flags) then
+		local sizeX = ImGui.GetContentRegionAvail() - 4
+		if ImGui.BeginTable("AlertTable", 3, sizeX, 0.0,GUI_Alert.Table.Flags) then
 			ImGui.TableSetupScrollFreeze(0, 1)
-			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort),90, GUI_Alert.Table.Column_ID.MobName)
-			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.DefaultSort),50, GUI_Alert.Table.Column_ID.MobDist)
-			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.WidthAlwaysAutoResize, ImGuiTableColumnFlags.NoSort), 30, GUI_Alert.Table.Column_ID.MobDirection)
+			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.DefaultSort),90, GUI_Alert.Table.Column_ID.MobName)
+			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.DefaultSort),50, GUI_Alert.Table.Column_ID.MobDist)
+			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 30, GUI_Alert.Table.Column_ID.MobDirection)
 			ImGui.TableHeadersRow()
 			local sortSpecsAlerts = ImGui.TableGetSortSpecs()
 			if not ME.Zoning() then
@@ -1762,7 +1768,7 @@ end
 local load_binds = function()
 	local bind_alertmaster = function(cmd, val)
 		local zone = Zone.ShortName():lower()
-		local val_num = tonumber(val)
+		local val_num = tonumber(val,10)
 		local val_str = tostring(val):gsub("\"","")
 		-- enable/disable
 		if cmd == 'on' then
@@ -1959,19 +1965,30 @@ local load_binds = function()
 			load_settings()
 			print_ts("\ayReloading Settings from File!")
 		end
+		local sCount = 0
 		-- adding/removing/listing spawn alerts for current zone
-		if cmd == 'spawnadd' and val_str:len() > 0 then
+		if cmd == 'spawnadd' then
+			if val_str ~= nil or val_str ~= 'nil' then
+				if mq.TLO.Target() ~= nil and mq.TLO.Target.Type() == 'NPC' then
+					val_str =mq.TLO.Target.DisplayName()
+				else
+					print("\arNO \aoSpawn supplied\aw or \agTarget")
+					return
+				end
+			end
 			-- if the zone doesn't exist in ini yet, create a new table
 			if settings[zone] == nil then settings[zone] = {} end
+			
 			-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
 			for k, v in pairs(settings[zone]) do
 				if settings[zone][k] == val_str then
 					print_ts("\aySpawn alert \""..val_str.."\" already exists.")
 					return
 				end
+				sCount = sCount + 1
 			end
 			-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
-			settings[zone]['Spawn'..getTableSize(settings[zone])+1] = val_str
+			settings[zone]['Spawn'..sCount+1] = val_str
 			save_settings()
 			print_ts('\ayAdded spawn alert for '..val_str..' in '..zone)
 			elseif cmd == 'spawndel' and val_str:len() > 0 then
@@ -2004,7 +2021,7 @@ local load_binds = function()
 				print_ts('\aySpawn alert for '..val_str..' not found in '..zone)
 			end
 			elseif cmd == 'spawnlist' then
-			if getTableSize(settings[zone]) > 0 then
+			if sCount > 0 then
 				print_ts('\aySpawn Alerts (\a-t'..zone..'\ax): ')
 				local tmp = {}
 				for k, v in pairs(settings[zone]) do table.insert(tmp, v) end
@@ -2028,7 +2045,9 @@ local load_binds = function()
 				print_ts('\aySpawn Alerts (\a-t'..zone..'\ax): No alerts found')
 			end
 		end
+
 		-- adding/removing/listing commands
+		local cmdCount = 0
 		if cmd == 'cmdadd' and val_str:len() > 0 then
 			-- if the section doesn't exist in ini yet, create a new table
 			if settings[CharCommands] == nil then settings[CharCommands] = {} end
@@ -2038,9 +2057,10 @@ local load_binds = function()
 					print_ts("\ayCommand \""..val_str.."\" already exists.")
 					return
 				end
+				cmdCount = cmdCount + 1
 			end
 			-- if we made it this far, the command is new -- add it to the table and store to ini
-			settings[CharCommands]['Cmd'..getTableSize(settings[CharCommands])+1] = val_str
+			settings[CharCommands]['Cmd'..cmdCount+1] = val_str
 			save_settings()
 			print_ts('\ayAdded Command \"'..val_str..'\"')
 			elseif cmd == 'cmddel' and val_str:len() > 0 then
@@ -2051,7 +2071,7 @@ local load_binds = function()
 			save_settings()
 			print_ts('\ayRemoved Command \"'..val_str..'\"')
 			elseif cmd == 'cmdlist' then
-			if getTableSize(settings[CharCommands]) > 0 then
+			if cmdCount > 0 then
 				print_ts('\ayCommands (\a-t'..ME.DisplayName()..'\ax): ')
 				for k, v in pairs(settings[CharCommands]) do
 					print_ts('\t\a-t'..k..' - '..v)
@@ -2061,6 +2081,7 @@ local load_binds = function()
 			end
 		end
 		-- adding/removing/listing ignored pcs
+		local ignoreCount = 0
 		if cmd == 'ignoreadd' and val_str:len() > 0 then
 			-- if the section doesn't exist in ini yet, create a new table
 			if settings['Ignore'] == nil then settings['Ignore'] = {} end
@@ -2070,9 +2091,10 @@ local load_binds = function()
 					print_ts('\ayAlready ignoring \"'..val_str..'\".')
 					return
 				end
+				ignoreCount = ignoreCount + 1
 			end
 			-- if we made it this far, the command is new -- add it to the table and store to ini
-			settings['Ignore']['Ignore'..getTableSize(settings['Ignore'])+1] = val_str
+			settings['Ignore']['Ignore'..ignoreCount+1] = val_str
 			save_settings()
 			print_ts('\ayNow ignoring \"'..val_str..'\"')
 			elseif cmd == 'ignoredel' and val_str:len() > 0 then
@@ -2083,7 +2105,7 @@ local load_binds = function()
 			save_settings()
 			print_ts('\ayNo longer ignoring \"'..val_str..'\"')
 			elseif cmd == 'ignorelist' then
-			if getTableSize(settings['Ignore']) > 0 then
+			if ignoreCount > 0 then
 				print_ts('\ayIgnore List (\a-t'..ME.DisplayName()..'\ax): ')
 				for k, v in pairs(settings['Ignore']) do
 					print_ts('\t\a-t'..k..' - '..v)
@@ -2241,7 +2263,6 @@ local loop = function()
 			end
 		end
 		if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
-		curZone = Zone.Name
 		if GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
 		mq.delay(delay..'s')
 	end
