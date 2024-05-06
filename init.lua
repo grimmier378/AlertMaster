@@ -1257,7 +1257,7 @@ local function DrawAlertRuleRow(entry)
 		DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
 	--end
 end
-
+local btnIconDel = Icons.MD_DELETE
 local function DrawSearchWindow()
 	if ME.Zoning() then return end
 	if GUI_Main.Locked then
@@ -1416,9 +1416,10 @@ local function DrawSearchWindow()
 				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
 					-- Set up table headers
 					ImGui.TableSetupScrollFreeze(0, 1)
-					ImGui.TableSetupColumn("NPC Name",ImGuiTableColumnFlags.None)
-					ImGui.TableSetupColumn("Zone",ImGuiTableColumnFlags.None)
-					ImGui.TableSetupColumn(Icons.MD_DELETE, bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.WidthFixed,15))
+					ImGui.TableSetupColumn("NPC Name##AMList",ImGuiTableColumnFlags.None)
+					ImGui.TableSetupColumn("Zone##AMList",ImGuiTableColumnFlags.None)
+					ImGui.TableSetupColumn(" "..btnIconDel.."##AMList", bit32.bor(ImGuiTableColumnFlags.WidthFixed,
+											ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.NoResize), 20)
 					ImGui.TableHeadersRow()
 					for index, npc in ipairs(sortedNpcs) do
 						local spawnName = npc.name
@@ -1452,8 +1453,8 @@ local function DrawSearchWindow()
 						end
 						ImGui.TableNextColumn()
 						ImGui.Text(Zone.ShortName())
-						local btnIcon = Icons.MD_DELETE
-						local buttonLabel = btnIcon .. "##Remove" .. tostring(index)
+						
+						local buttonLabel = btnIconDel .. "##AM_Remove" .. tostring(index)
 						ImGui.TableNextColumn()
 						if ImGui.SmallButton(buttonLabel) then
 							CMD('/am spawndel "' .. spawnName .. '"')
