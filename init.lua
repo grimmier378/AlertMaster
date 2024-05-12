@@ -556,9 +556,9 @@ local function AlertTableSortSpecs(a, b)
             end
         elseif spec.ColumnUserID == GUI_Alert.Table.Column_ID.MobDist then
             if a.MobDist and b.MobDist then
-                if a.MobDist < b.MobDist then
+                if math.floor(mq.TLO.Spawn(a.MobID).Distance()) < math.floor(mq.TLO.Spawn(b.MobID).Distance()) then
                     delta = -1
-                elseif a.MobDist > b.MobDist then
+                elseif math.floor(mq.TLO.Spawn(a.MobID).Distance()) > math.floor(mq.TLO.Spawn(b.MobID).Distance()) then
                     delta = 1
                 end
             else
@@ -795,8 +795,9 @@ local check_for_spawns = function()
 		if haveSM and (importZone or forceImport) then
 			local counter = 0
 			local tmpSpawnMaster = {}
-			-- Check for Long Name
-			if importedZones[Zone.ShortName():lower()] == nil or forceImport then
+			
+			if not importedZones[Zone.ShortName():lower()] or forceImport then
+				-- Check for Long Name
 				if spawnsSpawnMaster[Zone.Name():lower()] ~= nil then
 					tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()]
 					for k, v in pairs(tmpSpawnMaster) do
@@ -816,10 +817,9 @@ local check_for_spawns = function()
 				end
 				importZone = false
 				forceImport = false
-			end
-			if counter > 0 then
 				printf('\aw[\atAlert Master\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter)
 			end
+
 		end
 		if tmp ~= nil then
 			for id, v in pairs(tmp) do
@@ -1161,10 +1161,29 @@ local function DrawToggles()
 	end
 end
 
+local function addSpawnToList(name)
+	local sCount = 0
+	local zone = Zone.ShortName():lower()
+	if settings[zone] == nil then settings[zone] = {} end
+				
+	-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
+	for k, v in pairs(settings[zone]) do
+		if settings[zone][k] == name then
+			print_ts("\aySpawn alert \""..name.."\" already exists.")
+			return
+		end
+		sCount = sCount + 1
+	end
+	-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
+	settings[zone]['Spawn'..sCount+1] = name
+	save_settings()
+	print_ts('\ayAdded spawn alert for '..name..' in '..zone)
+end
+
 local function DrawRuleRow(entry)
 	ImGui.TableNextColumn()
 	-- Add to Spawn List Button
-	if ImGui.SmallButton(Icons.FA_USER_PLUS) then CMD('/am spawnadd "'..entry.MobName..'"') end
+	if ImGui.SmallButton(Icons.FA_USER_PLUS) then addSpawnToList(entry.MobName) end
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Add to Spawn List")
@@ -1246,7 +1265,7 @@ local function DrawAlertRuleRow(entry)
 			end
 		end
 	ImGui.TableSetColumnIndex(1)
-	local distance = entry.MobDist
+	local distance = math.floor(mq.TLO.Spawn(entry.MobID).Distance() or 0)
 	ImGui.PushStyleColor(ImGuiCol.Text,ColorDistance(distance))
 	ImGui.Text('\t'..tostring(distance))
 	ImGui.PopStyleColor()
@@ -1375,7 +1394,8 @@ local function DrawSearchWindow()
 			ImGui.SameLine()
 			-- Button to add the new spawn
 			if ImGui.Button(Icons.FA_USER_PLUS) and newSpawnName ~= "" then
-				CMD('/am spawnadd "'..newSpawnName..'"')
+				-- CMD('/am spawnadd "'..newSpawnName..'"')
+				addSpawnToList(newSpawnName)
 				newSpawnName = ""  -- Clear the input text after adding
 				npcs = settings[Zone.ShortName()] or {}
 			end
@@ -1388,6 +1408,7 @@ local function DrawSearchWindow()
 			if haveSM then
 				if ImGui.Button('Import Zone##ImportSM') then
 					forceImport = true
+					importZone = true
 					check_for_spawns()
 				end
 			end
@@ -1969,29 +1990,30 @@ local load_binds = function()
 		local sCount = 0
 		-- adding/removing/listing spawn alerts for current zone
 		if cmd == 'spawnadd' then
-			if val_str ~= nil or val_str ~= 'nil' then
-				if mq.TLO.Target() ~= nil and mq.TLO.Target.Type() == 'NPC' then
-					val_str =mq.TLO.Target.DisplayName()
-				else
-					print("\arNO \aoSpawn supplied\aw or \agTarget")
-					return
-				end
+			if val_str ~= nil and val_str ~= 'nil' then
+				val_str =mq.TLO.Target.DisplayName()
+			elseif mq.TLO.Target() ~= nil and mq.TLO.Target.Type() == 'NPC' then
+				val_str =mq.TLO.Target.DisplayName()
+			else
+				print("\arNO \aoSpawn supplied\aw or \agTarget")
+				return
 			end
-			-- if the zone doesn't exist in ini yet, create a new table
-			if settings[zone] == nil then settings[zone] = {} end
+			addSpawnToList(val_str)
+			-- -- if the zone doesn't exist in ini yet, create a new table
+			-- if settings[zone] == nil then settings[zone] = {} end
 			
-			-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
-			for k, v in pairs(settings[zone]) do
-				if settings[zone][k] == val_str then
-					print_ts("\aySpawn alert \""..val_str.."\" already exists.")
-					return
-				end
-				sCount = sCount + 1
-			end
-			-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
-			settings[zone]['Spawn'..sCount+1] = val_str
-			save_settings()
-			print_ts('\ayAdded spawn alert for '..val_str..' in '..zone)
+			-- -- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
+			-- for k, v in pairs(settings[zone]) do
+			-- 	if settings[zone][k] == val_str then
+			-- 		print_ts("\aySpawn alert \""..val_str.."\" already exists.")
+			-- 		return
+			-- 	end
+			-- 	sCount = sCount + 1
+			-- end
+			-- -- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
+			-- settings[zone]['Spawn'..sCount+1] = val_str
+			-- save_settings()
+			-- print_ts('\ayAdded spawn alert for '..val_str..' in '..zone)
 			elseif cmd == 'spawndel' and val_str:len() > 0 then
 			-- Identify and remove the spawn from the ini
 			local found = false
