@@ -1004,30 +1004,30 @@ local function DrawTheme(tName)
 end
 
 local function DrawToggles()
-	local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
-	Icons.FA_UNLOCK .. '##lockTablButton'
-	if ImGui.Button(lockedIcon) then
-		--ImGuiWindowFlags.NoMove
-		GUI_Main.Locked = not GUI_Main.Locked
-		settings[CharConfig]['locked'] = GUI_Main.Locked
-		save_settings()
-	end
+	local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK or
+	Icons.FA_UNLOCK
+	ImGui.Text(lockedIcon)
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Lock Window")
 		ImGui.EndTooltip()
+		if ImGui.IsMouseReleased(0) then
+			GUI_Main.Locked = not GUI_Main.Locked
+			settings[CharConfig]['locked'] = GUI_Main.Locked
+			save_settings()
+		end
 	end
 	ImGui.SameLine()
 	local gIcon = Icons.MD_SETTINGS
-	if ImGui.Button(gIcon) then
-		openConfigGUI = not openConfigGUI
-		save_settings()
-		--mq.pickle(themeFile, theme)
-	end
+	ImGui.Text(gIcon)
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Config")
 		ImGui.EndTooltip()
+		if ImGui.IsMouseReleased(0) then
+			openConfigGUI = not openConfigGUI
+			save_settings()
+		end
 	end
 	ImGui.SameLine()
 	-- Alert Popup Toggle Button
@@ -2259,6 +2259,7 @@ local loop = function()
 		if check_safe_zone() ~= true then
 			if ((os.time() - alertTime) > (remindNPC * 60) and numAlerts >0) then -- if we're past the alert remindnpc time and we have alerts to give
 				-- do text alerts
+					print_ts('\agNPC Alert Reminder!')
 				for _, v in pairs(tSpawns) do
 					local cleanName = tostring(v.DisplayName())
 					local distance = math.floor(v.Distance() or 0)
