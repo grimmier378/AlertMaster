@@ -75,6 +75,9 @@ local ZoomLvl = 1.0
 local doOnce = true
 local ColorCountAlert, ColorCountConf, ColorCount, StyleCount, StyleCountConf, StyleCountAlert = 0, 0, 0, 0, 0, 0
 local importedZones = {}
+local originalVolume = 50
+local playTime = 0
+
 
 local DistColorRanges = {
 	orange = 600, -- distance the color changes from green to orange
@@ -221,6 +224,7 @@ local soundsPath = mq.TLO.Lua.Dir().."\\alertmaster\\sounds\\"
 ffi.cdef[[
 int sndPlaySoundA(const char *pszSound, unsigned int fdwSound);
 uint32_t waveOutSetVolume(void* hwo, uint32_t dwVolume);
+uint32_t waveOutGetVolume(void* hwo, uint32_t* pdwVolume);
 ]]
 
 local winmm = ffi.load("winmm")
@@ -230,9 +234,20 @@ local SND_LOOP = 0x0008
 local SND_FILENAME = 0x00020000
 local flags = SND_FILENAME + SND_ASYNC
 
+local function getVolume()
+	local pdwVolume = ffi.new("uint32_t[1]")
+	winmm.waveOutGetVolume(nil, pdwVolume)
+	return pdwVolume[0]
+end
+
+local function resetVolume()
+	winmm.waveOutSetVolume(nil, originalVolume)
+end
+
 -- Function to play sound allowing for simultaneous plays
 local function playSound(name)
 	local filename = soundsPath..name
+	playTime = os.time()
 	winmm.sndPlaySoundA(filename, flags)
 end
 
@@ -1004,30 +1019,30 @@ local function DrawTheme(tName)
 end
 
 local function DrawToggles()
-	local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK or
-	Icons.FA_UNLOCK
-	ImGui.Text(lockedIcon)
+	local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
+	Icons.FA_UNLOCK .. '##lockTablButton'
+	if ImGui.Button(lockedIcon) then
+		--ImGuiWindowFlags.NoMove
+		GUI_Main.Locked = not GUI_Main.Locked
+		settings[CharConfig]['locked'] = GUI_Main.Locked
+		save_settings()
+	end
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Lock Window")
 		ImGui.EndTooltip()
-		if ImGui.IsMouseReleased(0) then
-			GUI_Main.Locked = not GUI_Main.Locked
-			settings[CharConfig]['locked'] = GUI_Main.Locked
-			save_settings()
-		end
 	end
 	ImGui.SameLine()
 	local gIcon = Icons.MD_SETTINGS
-	ImGui.Text(gIcon)
+	if ImGui.Button(gIcon) then
+		openConfigGUI = not openConfigGUI
+		save_settings()
+		--mq.pickle(themeFile, theme)
+	end
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Config")
 		ImGui.EndTooltip()
-		if ImGui.IsMouseReleased(0) then
-			openConfigGUI = not openConfigGUI
-			save_settings()
-		end
 	end
 	ImGui.SameLine()
 	-- Alert Popup Toggle Button
@@ -2212,6 +2227,7 @@ local load_binds = function()
 end
 
 local setup = function()
+	originalVolume = getVolume()
 	active = true
 	radius = arg[1] or 200
 	zradius = arg[2] or 100
@@ -2259,7 +2275,6 @@ local loop = function()
 		if check_safe_zone() ~= true then
 			if ((os.time() - alertTime) > (remindNPC * 60) and numAlerts >0) then -- if we're past the alert remindnpc time and we have alerts to give
 				-- do text alerts
-					print_ts('\agNPC Alert Reminder!')
 				for _, v in pairs(tSpawns) do
 					local cleanName = tostring(v.DisplayName())
 					local distance = math.floor(v.Distance() or 0)
@@ -2284,6 +2299,14 @@ local loop = function()
 				end
 				--reset alertTime to current time
 				alertTime = os.time()
+			end
+		end
+		
+		local currVol = getVolume()
+		if currVol ~= originalVolume then
+			local cTime = os.time()
+			if cTime - playTime > 2 then
+				resetVolume()
 			end
 		end
 		if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
