@@ -77,7 +77,7 @@ local ColorCountAlert, ColorCountConf, ColorCount, StyleCount, StyleCountConf, S
 local importedZones = {}
 local originalVolume = 50
 local playTime = 0
-
+local playing = false
 
 local DistColorRanges = {
 	orange = 600, -- distance the color changes from green to orange
@@ -242,12 +242,14 @@ end
 
 local function resetVolume()
 	winmm.waveOutSetVolume(nil, originalVolume)
+	playing = false
 end
 
 -- Function to play sound allowing for simultaneous plays
 local function playSound(name)
 	local filename = soundsPath..name
 	playTime = os.time()
+	playing = true
 	winmm.sndPlaySoundA(filename, flags)
 end
 
@@ -2303,7 +2305,7 @@ local loop = function()
 		end
 		
 		local currVol = getVolume()
-		if currVol ~= originalVolume then
+		if currVol ~= originalVolume and playing then
 			local cTime = os.time()
 			if cTime - playTime > 2 then
 				resetVolume()
