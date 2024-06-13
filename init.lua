@@ -60,6 +60,7 @@ local zone_id = Zone.ID() or 0
 local soundGM = 'GM.wav'
 local soundNPC = 'NPC.wav'
 local soundPC = 'PC.wav'
+local myName = mq.TLO.Me.Name() or 'Unknown'
 local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC, forceImport = false, false, false, false, false, false, false, false, false
 local delay, remind, pcs, spawns, gms, announce, ignoreguild, radius, zradius, remindNPC, showAggro = 1, 30, true, true, true, false, true, 100, 100, 5, true
 -- [[ UI ]] --
@@ -73,7 +74,7 @@ local openConfigGUI = false
 local themeFile = mq.configDir .. '/MyThemeZ.lua'
 local ZoomLvl = 1.0
 local doOnce = true
-local ColorCountAlert, ColorCountConf, ColorCount, StyleCount, StyleCountConf, StyleCountAlert = 0, 0, 0, 0, 0, 0
+local ColorCountAlert, ColorCountConf, StyleCountConf, StyleCountAlert = 0, 0, 0, 0
 local importedZones = {}
 local originalVolume = 50
 local playTime = 0
@@ -242,6 +243,7 @@ end
 
 local function resetVolume()
 	winmm.waveOutSetVolume(nil, originalVolume)
+	playTime = 0
 	playing = false
 end
 
@@ -266,7 +268,7 @@ end
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', TLO.Time()) end
 
 local GetCharZone = function()
-	return '\aw[\ao'..ME.DisplayName()..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
+	return '\aw[\ao'..myName..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
 end
 
 ---comment Check to see if the file we want to work on exists.
@@ -771,7 +773,7 @@ end
 local check_for_pcs = function()
 	if active and pcs then
 		local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..ME.ID())
-		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tPlayers[name] == nil then
@@ -808,7 +810,7 @@ local check_for_spawns = function()
 	if active and spawns then
 		local tmp = spawn_search_npcs()
 		local spawnAlertsUpdated, tableUpdate = false, false
-		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
 		if haveSM and (importZone or forceImport) then
 			local counter = 0
 			local tmpSpawnMaster = {}
@@ -898,7 +900,7 @@ end
 local check_for_announce = function()
 	if active and announce then
 		local tmp = spawn_search_players('pc notid '..ME.ID())
-		local charZone = '\aw[\a-o'..ME.DisplayName()..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tAnnounce[name] == nil then
@@ -1303,11 +1305,9 @@ local function DrawSearchWindow()
 	end
 	if SearchWindowOpen then
 		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
-		ColorCount = 0
-		StyleCount = 0
-		ColorCount, StyleCount = DrawTheme(useThemeName)
+		local ColorCount, StyleCount = DrawTheme(useThemeName)
 		if ZoomLvl > 1.25 then ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 4,7) end
-		SearchWindowOpen = ImGui.Begin("Alert Master##"..ME.DisplayName(), SearchWindowOpen, GUI_Main.Flags)
+		SearchWindowOpen = ImGui.Begin("Alert Master##"..myName, SearchWindowOpen, GUI_Main.Flags)
 		ImGui.BeginMenuBar()
 		ImGui.SetWindowFontScale(ZoomLvl)
 		DrawToggles()
@@ -2112,12 +2112,12 @@ local load_binds = function()
 			print_ts('\ayRemoved Command \"'..val_str..'\"')
 			elseif cmd == 'cmdlist' then
 			if cmdCount > 0 then
-				print_ts('\ayCommands (\a-t'..ME.DisplayName()..'\ax): ')
+				print_ts('\ayCommands (\a-t'..myName..'\ax): ')
 				for k, v in pairs(settings[CharCommands]) do
 					print_ts('\t\a-t'..k..' - '..v)
 				end
 				else
-				print_ts('\ayCommands (\a-t'..ME.DisplayName()..'\ax): No commands configured.')
+				print_ts('\ayCommands (\a-t'..myName..'\ax): No commands configured.')
 			end
 		end
 		-- adding/removing/listing ignored pcs
@@ -2146,12 +2146,12 @@ local load_binds = function()
 			print_ts('\ayNo longer ignoring \"'..val_str..'\"')
 			elseif cmd == 'ignorelist' then
 			if ignoreCount > 0 then
-				print_ts('\ayIgnore List (\a-t'..ME.DisplayName()..'\ax): ')
+				print_ts('\ayIgnore List (\a-t'..myName..'\ax): ')
 				for k, v in pairs(settings['Ignore']) do
 					print_ts('\t\a-t'..k..' - '..v)
 				end
 				else
-				print_ts('\ayIgnore List (\a-t'..ME.DisplayName()..'\ax): No ignore list configured.')
+				print_ts('\ayIgnore List (\a-t'..myName..'\ax): No ignore list configured.')
 			end
 		end
 		-- Announce Alerts
@@ -2229,6 +2229,7 @@ local load_binds = function()
 end
 
 local setup = function()
+	myName = mq.TLO.Me.Name() or 'Unknown'
 	originalVolume = getVolume()
 	active = true
 	radius = arg[1] or 200
@@ -2304,12 +2305,16 @@ local loop = function()
 			end
 		end
 		
-		local currVol = getVolume()
-		if currVol ~= originalVolume and playing then
+		if playing and playTime > 0 then
 			local cTime = os.time()
 			if cTime - playTime > 2 then
 				resetVolume()
+				mq.delay(1)
 			end
+		end
+		if not playing and playTime == 0 then
+			-- we aren't playing anything so we can double check the original voulme wasn't changed by the user.
+			originalVolume = getVolume()
 		end
 		if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
 		if GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
