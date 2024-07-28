@@ -79,6 +79,7 @@ local importedZones = {}
 local originalVolume = 50
 local playTime = 0
 local playing = false
+local currZone , lastZone
 
 local DistColorRanges = {
 	orange = 600, -- distance the color changes from green to orange
@@ -1025,7 +1026,7 @@ end
 local function DrawToggles()
 	local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
 	Icons.FA_UNLOCK .. '##lockTablButton'
-	if ImGui.Button(lockedIcon) then
+	if ImGui.SmallButton(lockedIcon) then
 		--ImGuiWindowFlags.NoMove
 		GUI_Main.Locked = not GUI_Main.Locked
 		settings[CharConfig]['locked'] = GUI_Main.Locked
@@ -1038,7 +1039,7 @@ local function DrawToggles()
 	end
 	ImGui.SameLine()
 	local gIcon = Icons.MD_SETTINGS
-	if ImGui.Button(gIcon) then
+	if ImGui.SmallButton(gIcon) then
 		openConfigGUI = not openConfigGUI
 		save_settings()
 		--mq.pickle(themeFile, theme)
@@ -1052,7 +1053,7 @@ local function DrawToggles()
 	-- Alert Popup Toggle Button
 	if doAlert then
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.Button(Icons.MD_ALARM) then CMD('/am doalert') end
+		if ImGui.SmallButton(Icons.MD_ALARM) then CMD('/am doalert') end
 		ImGui.PopStyleColor(1)
 		else
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
@@ -1068,7 +1069,7 @@ local function DrawToggles()
 	-- Beep Alert Toggle Button
 	if doBeep then
 		ImGui.PushStyleColor(ImGuiCol.Button,COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.Button(Icons.FA_BELL_O) then CMD('/am beep') end
+		if ImGui.SmallButton(Icons.FA_BELL_O) then CMD('/am beep') end
 		ImGui.PopStyleColor(1)
 		else
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
@@ -1084,11 +1085,11 @@ local function DrawToggles()
 	-- Alert Window Toggle Button
 	if AlertWindowOpen then
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.Button(Icons.MD_VISIBILITY) then CMD('/am popup') end
+		if ImGui.SmallButton(Icons.MD_VISIBILITY) then CMD('/am popup') end
 		ImGui.PopStyleColor(1)
 		else
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for inactive state
-		if ImGui.Button(Icons.MD_VISIBILITY_OFF) then CMD('/am popup') end
+		if ImGui.SmallButton(Icons.MD_VISIBILITY_OFF) then CMD('/am popup') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1098,7 +1099,7 @@ local function DrawToggles()
 	end
 	ImGui.SameLine()
 	-- Button to add the new spawn
-	if ImGui.Button(Icons.FA_HASHTAG) then
+	if ImGui.SmallButton(Icons.FA_HASHTAG) then
 		CMD('/am spawnadd ${Target}')
 		npcs = settings[Zone.ShortName()] or {}
 	end
@@ -1109,7 +1110,7 @@ local function DrawToggles()
 	end
 	ImGui.SameLine()
 	-- Button to add the new spawn
-	if ImGui.Button(Icons.FA_BULLSEYE) then
+	if ImGui.SmallButton(Icons.FA_BULLSEYE) then
 		CMD('/am spawnadd "${Target.DisplayName}"')
 		npcs = settings[Zone.ShortName()] or {}
 	end
@@ -1122,11 +1123,11 @@ local function DrawToggles()
 	-- Arrow Status Toggle Button
 	if DoDrawArrow then
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.Button(Icons.FA_ARROW_UP) then DoDrawArrow, settings[CharConfig]['arrows'] = false, false save_settings() end
+		if ImGui.SmallButton(Icons.FA_ARROW_UP) then DoDrawArrow, settings[CharConfig]['arrows'] = false, false save_settings() end
 		ImGui.PopStyleColor(1)
 		else
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.Button(Icons.FA_ARROW_DOWN) then DoDrawArrow, settings[CharConfig]['arrows'] = true,true save_settings() end
+		if ImGui.SmallButton(Icons.FA_ARROW_DOWN) then DoDrawArrow, settings[CharConfig]['arrows'] = true,true save_settings() end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1138,11 +1139,11 @@ local function DrawToggles()
 	-- Aggro Status Toggle Button
 	if showAggro then
 		ImGui.PushStyleColor(ImGuiCol.Button,COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.Button(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
+		if ImGui.SmallButton(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
 		ImGui.PopStyleColor(1)
 		else
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.Button(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
+		if ImGui.SmallButton(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1154,11 +1155,11 @@ local function DrawToggles()
 	-- Alert Master Scanning Toggle Button
 	if active then
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.Button(Icons.FA_HEARTBEAT) then CMD('/am off') end
+		if ImGui.SmallButton(Icons.FA_HEARTBEAT) then CMD('/am off') end
 		ImGui.PopStyleColor(1)
 		else
 		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.Button(Icons.MD_DO_NOT_DISTURB) then CMD('/am on') end
+		if ImGui.SmallButton(Icons.MD_DO_NOT_DISTURB) then CMD('/am on') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1297,7 +1298,7 @@ local function DrawAlertRuleRow(entry)
 end
 local btnIconDel = Icons.MD_DELETE
 local function DrawSearchWindow()
-	if ME.Zoning() then return end
+	if currZone ~= lastZone then return end
 	if GUI_Main.Locked then
 		GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
 		else
@@ -1372,7 +1373,7 @@ local function DrawSearchWindow()
 				ImGui.TableSetupColumn(Icons.FA_COMPASS, bit32.bor(ImGuiTableColumnFlags.NoResize,ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.WidthFixed), 15, GUI_Main.Table.Column_ID.MobDirection)
 				ImGui.TableHeadersRow()
 				local sortSpecs = ImGui.TableGetSortSpecs()
-				if not ME.Zoning() then
+				
 					if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
 						if #Table_Cache.Unhandled > 0 then
 							GUI_Main.Table.SortSpecs = sortSpecs
@@ -1394,7 +1395,7 @@ local function DrawSearchWindow()
 						end
 					end
 					clipper:End()
-				end
+				
 				ImGui.EndTable()
 			end
 			elseif currentTab == "npcList" then
@@ -1739,7 +1740,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 30, GUI_Alert.Table.Column_ID.MobDirection)
 			ImGui.TableHeadersRow()
 			local sortSpecsAlerts = ImGui.TableGetSortSpecs()
-			if not ME.Zoning() then
+			
 				if sortSpecsAlerts and (sortSpecsAlerts.SpecsDirty or GUI_Alert.Refresh.Sort.Rules) then
 					if #Table_Cache.Alerts > 0 then
 						GUI_Alert.Table.SortSpecs = sortSpecsAlerts
@@ -1761,7 +1762,7 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 					end
 				end
 				clipper:End()
-			end
+			
 			ImGui.EndTable()
 		end
 	end
@@ -1772,7 +1773,7 @@ function DrawAlertGUI() -- Draw GUI Window
 		local opened = false
 		ColorCountAlert = 0
 		StyleCountAlert = 0
-		if ME.Zoning() then return end
+		if currZone ~= lastZone then return end
 		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		ColorCountAlert, StyleCountAlert = DrawTheme(useThemeName)
 		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, GUI_Alert.Flags)
@@ -2234,6 +2235,8 @@ local setup = function()
 	active = true
 	radius = arg[1] or 200
 	zradius = arg[2] or 100
+	currZone = mq.TLO.Zone.ID()
+	lastZone = currZone
 	if TLO.Plugin('mq2eqbc').IsLoaded() then groupCmd = '/bcaa /' end
 	load_settings()
 	load_binds()
@@ -2254,6 +2257,7 @@ end
 local loop = function()
 	while true do
 		if TLO.Window('CharacterListWnd').Open() then return false end
+		currZone = mq.TLO.Zone.ID()
 		check_for_zone_change()
 		check_for_spawns() -- always refresh spawn list and only alert if not a safe zone.(checked later in the function)
 		if check_safe_zone() ~= true then
@@ -2261,18 +2265,10 @@ local loop = function()
 			check_for_announce()
 			check_for_pcs()
 		end
-		if ME.Zoning() then
+		if currZone ~= lastZone then
 			numAlerts = 0
-			if SearchWindow_Show then
-				SearchWindow_Show = false
-				zSettings = true
-			end
-		else
-			if zSettings then
-				RefreshZone()
-				SearchWindow_Show = true
-				zSettings = false
-			end
+			RefreshZone()
+			lastZone = currZone
 		end
 		--CMD('/echo '..numAlerts)
 		if check_safe_zone() ~= true then
