@@ -23,7 +23,7 @@
 	* remind setting is in minutes.
 ]]
 local LIP = require('lib/LIP')
-require('lib/ed/utils')
+-- require('lib/ed/utils')
 --- @type Mq
 local mq = require('mq')
 --- @type ImGui
@@ -269,7 +269,7 @@ end
 local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', TLO.Time()) end
 
 local GetCharZone = function()
-	return '\aw[\ao'..myName..'\aw] [\at'..Zone.ShortName():lower()..'\aw] '
+	return '\aw[\ao'..myName..'\aw] [\at'..Zone.ShortName()..'\aw] '
 end
 
 ---comment Check to see if the file we want to work on exists.
@@ -307,11 +307,11 @@ local save_settings = function()
 end
 
 local check_safe_zone = function()
-	return tSafeZones[Zone.ShortName():lower()]
+	return tSafeZones[Zone.ShortName()]
 end
 
 local function import_spawnmaster(val)
-	local zoneShort = Zone.ShortName():lower()
+	local zoneShort = Zone.ShortName()
 	local val_str = tostring(val):gsub("\"","")
 	if zoneShort ~= nil then
 		local count = 0
@@ -774,7 +774,7 @@ end
 local check_for_pcs = function()
 	if active and pcs then
 		local tmp = spawn_search_players('pc radius '..radius..' zradius '..zradius..' notid '..ME.ID())
-		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName()..'\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tPlayers[name] == nil then
@@ -811,15 +811,15 @@ local check_for_spawns = function()
 	if active and spawns then
 		local tmp = spawn_search_npcs()
 		local spawnAlertsUpdated, tableUpdate = false, false
-		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName()..'\aw] '
 		if haveSM and (importZone or forceImport) then
 			local counter = 0
 			local tmpSpawnMaster = {}
 			
-			if not importedZones[Zone.ShortName():lower()] or forceImport then
+			if not importedZones[Zone.ShortName()] or forceImport then
 				-- Check for Long Name
-				if spawnsSpawnMaster[Zone.Name():lower()] ~= nil then
-					tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()]
+				if spawnsSpawnMaster[Zone.Name()] ~= nil then
+					tmpSpawnMaster = spawnsSpawnMaster[Zone.Name()]
 					for k, v in pairs(tmpSpawnMaster) do
 						if import_spawnmaster(v) then
 							counter = counter + 1
@@ -827,8 +827,8 @@ local check_for_spawns = function()
 					end
 				end
 				-- Check for Short Name
-				if spawnsSpawnMaster[Zone.ShortName():lower()] ~= nil  then
-					tmpSpawnMaster = spawnsSpawnMaster[Zone.ShortName():lower()]
+				if spawnsSpawnMaster[Zone.ShortName()] ~= nil  then
+					tmpSpawnMaster = spawnsSpawnMaster[Zone.ShortName()]
 					for k, v in pairs(tmpSpawnMaster) do
 						if import_spawnmaster(v) then
 							counter = counter + 1
@@ -901,7 +901,7 @@ end
 local check_for_announce = function()
 	if active and announce then
 		local tmp = spawn_search_players('pc notid '..ME.ID())
-		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName():lower()..'\aw] '
+		local charZone = '\aw[\a-o'..myName..'\aw|\at'..Zone.ShortName()..'\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tAnnounce[name] == nil then
@@ -1183,7 +1183,7 @@ end
 
 local function addSpawnToList(name)
 	local sCount = 0
-	local zone = Zone.ShortName():lower()
+	local zone = Zone.ShortName()
 	if settings[zone] == nil then settings[zone] = {} end
 				
 	-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
@@ -1776,7 +1776,7 @@ function DrawAlertGUI() -- Draw GUI Window
 		if currZone ~= lastZone then return end
 		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		ColorCountAlert, StyleCountAlert = DrawTheme(useThemeName)
-		AlertWindowOpen, opened = ImGui.Begin("Alert Window", AlertWindowOpen, GUI_Alert.Flags)
+		AlertWindowOpen, opened = ImGui.Begin("Alert Window##"..myName, AlertWindowOpen, GUI_Alert.Flags)
 		if not opened then
 			AlertWindowOpen = false
 			AlertWindow_Show = false
@@ -1807,7 +1807,7 @@ end
 
 local load_binds = function()
 	local bind_alertmaster = function(cmd, val)
-		local zone = Zone.ShortName():lower()
+		local zone = Zone.ShortName()
 		local val_num = tonumber(val,10)
 		local val_str = tostring(val):gsub("\"","")
 		-- enable/disable
