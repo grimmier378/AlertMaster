@@ -275,7 +275,7 @@ end
 ---comment Check to see if the file we want to work on exists.
 ---@param name string -- Full Path to file
 ---@return boolean -- returns true if the file exists and false otherwise
-function File_Exists(name)
+local function File_Exists(name)
 	local f=io.open(name,"r")
 	if f~=nil then io.close(f) return true else return false end
 end
@@ -314,21 +314,25 @@ local function import_spawnmaster(val)
 	local zoneShort = Zone.ShortName()
 	local val_str = tostring(val):gsub("\"","")
 	if zoneShort ~= nil then
+		local flag = true
 		local count = 0
 		if settings[zoneShort] == nil then settings[zoneShort] = {} end
 		-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
 		for k, v in pairs(settings[zoneShort]) do
-			if string.find(string.lower(settings[zoneShort][k]), string.lower(val_str)) then
-				return false
+			if string.find(settings[zoneShort][k], val_str) then
+				flag = false
 			end
-			count = count + 1
+			if flag then
+				count = count + 1
+			end
 		end
 		importedZones[zoneShort] = true
 		-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
 		settings[zoneShort]['Spawn'..count+1] = val_str
-		save_settings()
-		mq.pickle(smImportList, importedZones)
-		return true
+		if flag then
+			save_settings()
+		end
+		return flag
 	end
 end
 
@@ -837,6 +841,7 @@ local check_for_spawns = function()
 				end
 				importZone = false
 				forceImport = false
+				mq.pickle(smImportList, importedZones)
 				printf('\aw[\atAlert Master\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter)
 			end
 
@@ -1970,6 +1975,10 @@ local load_binds = function()
 			save_settings()
 			print_ts('\ayRemind interval = '..remind)
 		end
+		if cmd == 'reload' then
+			load_settings()
+			print_ts("\ayReloading Settings from File!")
+		end
 		if cmd == 'remindnpc' and  val_num >= 0 then
 			settings[CharConfig]['remindNPC'] =  val_num
 			remindNPC =  val_num
@@ -2194,6 +2203,7 @@ local load_binds = function()
 			print_ts('\t\ay/am doalert \a-t -- toggle Popup alerts')
 			print_ts('\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
 			print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
+			print_ts('\t\ay/am reload #\a-t -- reload the Config File')
 			print_ts('\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
 			print_ts('\t\ay/am delay #\a-t -- configure alert check delay (seconds)')
 			print_ts('\t\ay/am remind #\a-t -- configure Player and GM alert reminder interval (seconds)')
