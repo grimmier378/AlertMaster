@@ -55,13 +55,15 @@ local defaultConfig =  { delay = 1,remindNPC=5, remind = 30, aggro = false, pcs 
 local tSafeZones, spawnAlerts, spawnsSpawnMaster, settings = {}, {}, {}, {}
 local npcs, tAnnounce, tPlayers, tSpawns, tGMs = {}, {}, {}, {}, {}
 local alertTime, numAlerts = 0,0
-local volNPC, volGM, volPC = 100, 100, 100
+local volNPC, volGM, volPC, volPCEntered, volPCLeft = 100, 100, 100, 100, 100
 local zone_id = Zone.ID() or 0
 local soundGM = 'GM.wav'
 local soundNPC = 'NPC.wav'
 local soundPC = 'PC.wav'
+local soundPCEntered = 'PCEntered.wav'
+local soundPCLeft = 'PCLeft.wav'
 local myName = mq.TLO.Me.Name() or 'Unknown'
-local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC, forceImport = false, false, false, false, false, false, false, false, false
+local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC, forceImport, doSoundPCEntered, doSoundPCLeft = false, false, false, false, false, false, false, false, false, false, false
 local delay, remind, pcs, spawns, gms, announce, ignoreguild, radius, zradius, remindNPC, showAggro = 1, 30, true, true, true, false, true, 100, 100, 5, true
 -- [[ UI ]] --
 local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, showTooltips, active = false, false, false, false, true, false
@@ -417,7 +419,14 @@ local function load_settings()
 	settings[CharConfig]['soundNPC'] = soundNPC
 	soundPC = settings[CharConfig]['soundPC'] or soundPC
 	settings[CharConfig]['soundPC'] = soundPC
-
+	soundPCEntered = settings[CharConfig]['soundPCEntered'] or soundPCEntered
+	settings[CharConfig]['soundPCEntered'] = soundPCEntered
+	soundPCLeft = settings[CharConfig]['soundPCLeft'] or soundPCLeft
+	settings[CharConfig]['soundPCLeft'] = soundPCLeft
+	volPCEntered = settings[CharConfig]['volPCEntered'] or volPCEntered
+	settings[CharConfig]['volPCEntered'] = volPCEntered
+	volPCLeft = settings[CharConfig]['volPCLeft'] or volPCLeft
+	settings[CharConfig]['volPCLeft'] = volPCLeft
 	save_settings()
 	if GUI_Main.Locked then
 		SearchWindow_Show = true
@@ -912,6 +921,10 @@ local check_for_announce = function()
 				if tAnnounce[name] == nil then
 					tAnnounce[name] = v
 					print_ts(GetCharZone()..v.name..' '..v.guild..' entered the zone.')
+					if doSoundPCEntered then
+						setVolume(volPCEntered)
+						playSound(soundPCEntered)
+					end
 				end
 			end
 			if tAnnounce ~= nil then
@@ -919,6 +932,10 @@ local check_for_announce = function()
 					if tmp[name] == nil then
 						tAnnounce[name] = nil
 						print_ts(GetCharZone()..v.name..' left the zone.')
+						if doSoundPCLeft then
+							setVolume(volPCLeft)
+							playSound(soundPCLeft)
+						end
 					end
 				end
 			end
@@ -1685,6 +1702,70 @@ local function Config_GUI(open)
 			settings[CharConfig]['soundPC'] = soundPC
 			save_settings()
 		end
+		--- PC Announce ---
+		ImGui.SeparatorText("PC Announce##AlertMaster")
+		--- tmp vars to change ---
+		local tmpSndPCEntered = soundPCEntered or 'PC.wav'
+		local tmpVolPCEntered = volPCEntered or 100
+		local tmpDoPCEntered = doSoundPCEntered
+		local tmpSndPCLeft = soundPCLeft or 'PC.wav'
+		local tmpVolPCLeft = volPCLeft or 100
+		local tmpDoPCLeft = doSoundPCLeft
+
+		tmpDoPCEntered = ImGui.Checkbox('PC Entered##AlertMaster', tmpDoPCEntered)
+		if doSoundPCEntered ~= tmpDoPCEntered then
+			doSoundPCEntered = tmpDoPCEntered
+			settings[CharConfig]['doSoundPCEntered'] = doSoundPCEntered
+			save_settings()
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(70)
+		tmpSndPCEntered = ImGui.InputText('Filename##PCENTEREDSND', tmpSndPCEntered)
+		if tmpSndPCEntered ~= soundPCEntered then
+			soundPCEntered = tmpSndPCEntered
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(100)
+		tmpVolPCEntered = ImGui.InputFloat('Volume##PCENTEREDVOL',tmpVolPCEntered, 0.1)
+		if tmpVolPCEntered ~= volPCEntered then
+			volPCEntered = tmpVolPCEntered
+		end
+		ImGui.SameLine()
+		if ImGui.Button("Test and Save##PCENTEREDALERT") then
+			setVolume(volPCEntered)
+			playSound(soundPCEntered)
+			settings[CharConfig]['volPCEntered'] = volPCEntered
+			settings[CharConfig]['soundPCEntered'] = soundPCEntered
+			save_settings()
+		end
+		tmpDoPCLeft = ImGui.Checkbox('PC Left##AlertMaster', tmpDoPCLeft)
+		if doSoundPCLeft ~= tmpDoPCLeft then
+			doSoundPCLeft = tmpDoPCLeft
+			settings[CharConfig]['doSoundPCLeft'] = doSoundPCLeft
+			save_settings()
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(70)
+		tmpSndPCLeft = ImGui.InputText('Filename##PCLEFTSND', tmpSndPCLeft)
+		if tmpSndPCLeft ~= soundPCLeft then
+			soundPCLeft = tmpSndPCLeft
+		end
+		ImGui.SameLine()
+		ImGui.SetNextItemWidth(100)
+		tmpVolPCLeft = ImGui.InputFloat('Volume##PCLEFTVOL',tmpVolPCLeft, 0.1)
+		if tmpVolPCLeft ~= volPCLeft then
+			volPCLeft = tmpVolPCLeft
+		end
+		ImGui.SameLine()
+		if ImGui.Button("Test and Save##PCLEFTALERT") then
+			setVolume(volPCLeft)
+			playSound(soundPCLeft)
+			settings[CharConfig]['volPCLeft'] = volPCLeft
+			settings[CharConfig]['soundPCLeft'] = soundPCLeft
+			save_settings()
+		end
+
+
 		--- NPC Alerts ---
 		ImGui.SeparatorText("NPC Alerts##AlertMaster")
 		--- tmp vars to change ---
