@@ -702,7 +702,7 @@ end
 
 local run_char_commands = function()
 	if settings[CharCommands] ~= nil then
-		for k, cmd in pairs(settings[CharCommands]) do CMD(cmd) end
+		for k, cmd in pairs(settings[CharCommands]) do CMD(cmd) printf('Ran command: "%s"', cmd) end
 	end
 end
 
@@ -1383,6 +1383,7 @@ local function DrawSearchWindow()
 			end
 			ImGui.Separator()
 			local sizeX = ImGui.GetContentRegionAvail() - 4
+			ImGui.SetWindowFontScale(ZoomLvl)
 			if ImGui.BeginTable('##RulesTable', 8, GUI_Main.Table.Flags) then
 				ImGui.TableSetupScrollFreeze(0, 1)
 				ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
@@ -2179,6 +2180,9 @@ local load_binds = function()
 
 		-- adding/removing/listing commands
 		local cmdCount = 0
+		for k, v in pairs(settings[CharCommands]) do
+			cmdCount = cmdCount + 1
+		end
 		if cmd == 'cmdadd' and val_str:len() > 0 then
 			-- if the section doesn't exist in ini yet, create a new table
 			if settings[CharCommands] == nil then settings[CharCommands] = {} end
@@ -2197,7 +2201,8 @@ local load_binds = function()
 			elseif cmd == 'cmddel' and val_str:len() > 0 then
 			-- remove from the ini
 			for k, v in pairs(settings[CharCommands]) do
-				if settings[CharCommands][k] == val_str then settings[CharCommands][k] = nil end
+				if k:lower() == val_str:lower() then settings[CharCommands][k] = nil break end
+				if settings[CharCommands][k] == val_str then settings[CharCommands][k] = nil break end
 			end
 			save_settings()
 			print_ts('\ayRemoved Command \"'..val_str..'\"')
