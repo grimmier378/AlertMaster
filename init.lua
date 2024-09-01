@@ -223,7 +223,7 @@ local GUI_Alert = {
 }
 ------- Sounds ----------
 local ffi = require("ffi")
-local soundsPath = mq.TLO.Lua.Dir().."\\alertmaster\\sounds\\"
+local soundsPath = string.format("%s/alertmaster/sounds/",mq.TLO.Lua.Dir())
 -- C code definitions
 ffi.cdef[[
 int sndPlaySoundA(const char *pszSound, unsigned int fdwSound);
@@ -339,7 +339,6 @@ local function import_spawnmaster(val)
 end
 
 local function load_settings()
-
 
 	if File_Exists(settings_path) then
 		settings = LIP.load(settings_path)
@@ -1548,7 +1547,7 @@ local function Config_GUI(open)
 	-- local themeName = theme.LoadTheme or 'notheme'
 	ColorCountConf, StyleCountConf = DrawTheme(useThemeName)
 
-	open, openConfigGUI = ImGui.Begin("Alert master Config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoCollapse))
+	open, openConfigGUI = ImGui.Begin("Alert master Config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.NoCollapse))
 	ImGui.SetWindowFontScale(ZoomLvl)
 	if not openConfigGUI then
 		openConfigGUI = false
@@ -1593,47 +1592,23 @@ local function Config_GUI(open)
 	end
 
 	if ImGui.CollapsingHeader('Toggles##AlertMaster') then
-		local tmpLock = GUI_Main.Locked
-		local tmpAlrt = doAlert
-		local tmpBeep = doBeep
-		local tmpArrow = DoDrawArrow
-		local tmpAgg = showAggro
-
-		tmpLock = ImGui.Checkbox('Lock Windows', tmpLock)
-		if tmpLock ~= GUI_Main.Locked then
-			GUI_Main.Locked = tmpLock
-			settings[CharConfig]['locked'] = GUI_Main.Locked
-			save_settings()
+		local keys = {}
+		if ImGui.BeginTable('##ToggleTable', 2, ImGuiTableFlags.Resizable) then
+			ImGui.TableSetupColumn('##ToggleCol1', ImGuiTableColumnFlags.None)
+			ImGui.TableSetupColumn('##ToggleCol2', ImGuiTableColumnFlags.None)
+			ImGui.TableNextRow()
+			for k,v in pairs(settings[CharConfig]) do
+				if type(v) == 'boolean' then
+					keys[k] = false
+					settings[CharConfig][k],keys[k]  = ImGui.Checkbox(k, v)
+					if keys[k] then
+						save_settings()
+					end
+					ImGui.TableNextColumn()
+				end
+			end
+			ImGui.EndTable()
 		end
-		ImGui.SameLine()
-		tmpAlrt = ImGui.Checkbox('Show Pop Up', tmpAlrt)
-		if tmpAlrt ~= doAlert then
-			doAlert = tmpAlrt
-			settings[CharConfig]['popup'] = doAlert
-			save_settings()
-		end
-		ImGui.SameLine()
-		tmpBeep = ImGui.Checkbox('Do Beeps', tmpBeep)
-		if doBeep ~= tmpBeep then
-			doBeep = tmpBeep
-			settings[CharConfig]['beep'] = doBeep
-			save_settings()
-		end
-
-		tmpArrow = ImGui.Checkbox('Show Arrows', tmpArrow)
-		if DoDrawArrow ~= tmpArrow then
-			DoDrawArrow = tmpArrow
-			settings[CharConfig]['arrows'] = DoDrawArrow
-			save_settings()
-		end
-		ImGui.SameLine()
-		tmpAgg = ImGui.Checkbox('Show Aggro Meters', tmpAgg)
-		if showAggro ~= tmpAgg then
-			showAggro = tmpAgg
-			settings[CharConfig]['aggro'] = showAggro
-			save_settings()
-		end
-		
 	end
 
 	if ImGui.CollapsingHeader('Sounds##AlertMaster') then
@@ -1802,6 +1777,30 @@ local function Config_GUI(open)
 		end
 	end
 
+	if ImGui.CollapsingHeader("Commands") then
+		if ImGui.BeginTable("CommandTable", 2, ImGuiTableFlags.Resizable) then
+			ImGui.TableSetupColumn("Command", ImGuiTableColumnFlags.None)
+			ImGui.TableSetupColumn("Text", ImGuiTableColumnFlags.None)
+			for key, command in pairs(settings[CharCommands]) do
+				local tmpCmd = command
+				ImGui.TableNextRow()
+				ImGui.TableNextColumn()
+				ImGui.Text(key)
+				ImGui.TableNextColumn()
+				tmpCmd = ImGui.InputText("##"..key, tmpCmd)
+				if tmpCmd ~= command then
+					if tmpCmd == '' or tmpCmd == nil then
+						settings[CharCommands][key] = nil
+					else
+						settings[CharCommands][key] = tmpCmd
+					end
+					save_settings()
+				end
+			end
+			ImGui.EndTable()
+		end
+	end
+	
 	if ImGui.Button('Close') then
 		openConfigGUI = false
 		settings[CharConfig]['theme'] = useThemeName
