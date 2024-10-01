@@ -24,8 +24,8 @@
 --@author Dynodzzo
 
 -- Additions by Special Ed
-    -- Sorting section/keys before saving ini files
-	-- Expanded pattern used for loading keys (underscores, periods, apostrophes)
+-- Sorting section/keys before saving ini files
+-- Expanded pattern used for loading keys (underscores, periods, apostrophes)
 
 local LIP = {};
 
@@ -40,27 +40,27 @@ function LIP.load(fileName)
 	local count = 0
 	for line in file:lines() do
 		local tempSection = line:match('^%[([^%[%]]+)%]$');
-		if(tempSection)then
+		if (tempSection) then
 			-- print(tempSection)
 			section = tonumber(tempSection) and tonumber(tempSection) or tempSection;
 			data[section] = data[section] or {};
 			count = 0
 		end
 		local param, value = line:match("^([%w|_'.%s-]+)=%s-(.+)$");
-		if(param and value ~= nil)then
-			if(tonumber(value))then
+		if (param and value ~= nil) then
+			if (tonumber(value)) then
 				value = tonumber(value);
-			elseif(value == 'true')then
+			elseif (value == 'true') then
 				value = true;
-			elseif(value == 'false')then
+			elseif (value == 'false') then
 				value = false;
 			end
-			if(tonumber(param))then
+			if (tonumber(param)) then
 				param = tonumber(param);
 			end
-			if string.find(tostring(param),'Spawn') then
-				count =  count + 1
-				param = string.format("Spawn%d",count)
+			if string.find(tostring(param), 'Spawn') then
+				count = count + 1
+				param = string.format("Spawn%d", count)
 			end
 			data[section][param] = value;
 		end
@@ -76,12 +76,12 @@ function LIP.loadSM(fileName)
 	local section;
 	for line in file:lines() do
 		local tempSection = line:match('^%[([^%[%]]+)%]');
-		if(tempSection)then
-			section = tempSection;
+		if (tempSection) then
+			section = tempSection:lower();
 			data[section] = data[section] or {};
 		end
 		local param, value = line:match("^([%w|_'.%s-]+)=%s-(.+)$");
-		if(param ~= 'OnSpawnCommand' and param ~= 'Enabled' and param ~= nil and value ~= nil)then
+		if (param ~= 'OnSpawnCommand' and param ~= 'Enabled' and param ~= nil and value ~= nil) then
 			data[section][param] = value;
 		end
 	end
