@@ -22,35 +22,37 @@
 	* Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
 	* remind setting is in minutes.
 ]]
-local LIP = require('lib/LIP')
--- require('lib/ed/utils')
---- @type Mq
+local LIP = require('lib.lip')
 local mq = require('mq')
---- @type ImGui
-require('ImGui')
-local Icons = require('mq.ICONS')
-local COLOR = require('color.colors')
+local ImGui = require('ImGui')
+Module = {}
+Module.Name = 'AlertMaster'
+
+local loadedExeernally = MyUI_ScriptName ~= nil and true or false
+if not loadedExeernally then
+	MyUI_Utils      = require('lib.common')
+	MyUI_CharLoaded = mq.TLO.Me.DisplayName()
+	MyUI_Colors     = require('lib.colors')
+	MyUI_Guild      = mq.TLO.Me.Guild()
+	MyUI_Icons      = require('mq.ICONS')
+end
 -- Variables
 local arg = { ..., }
 local amVer = '2.07'
-local CMD = mq.cmd
-local CMDF = mq.cmdf
-local TLO = mq.TLO
-local ME = TLO.Me
-local SpawnCount = TLO.SpawnCount
-local NearestSpawn = TLO.NearestSpawn
+local SpawnCount = mq.TLO.SpawnCount
+local NearestSpawn = mq.TLO.NearestSpawn
 local smSettings = mq.configDir .. '/MQ2SpawnMaster.ini'
-local config_dir = TLO.MacroQuest.Path():gsub('\\', '/')
+local config_dir = mq.TLO.MacroQuest.Path():gsub('\\', '/')
 local settings_file = '/config/AlertMaster.ini'
 local settings_path = config_dir .. settings_file
 local smImportList = mq.configDir .. '/am_imports.lua'
-local Group = TLO.Group
-local Raid = TLO.Raid
-local Zone = TLO.Zone
+local Group = mq.TLO.Group
+local Raid = mq.TLO.Raid
+local Zone = mq.TLO.Zone
 local groupCmd = '/dgae ' -- assumes DanNet, if EQBC found we switch to '/bcca /'
 local angle = 0
-local CharConfig = 'Char_' .. ME.DisplayName() .. '_Config'
-local CharCommands = 'Char_' .. ME.DisplayName() .. '_Commands'
+local CharConfig = 'Char_' .. mq.TLO.Me.DisplayName() .. '_Config'
+local CharCommands = 'Char_' .. mq.TLO.Me.DisplayName() .. '_Commands'
 local defaultConfig = { delay = 1, remindNPC = 5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true, beep = false, popup = false, distmid = 600, distfar = 1200, locked = false, }
 local tSafeZones, spawnAlerts, spawnsSpawnMaster, settings = {}, {}, {}, {}
 local npcs, tAnnounce, tPlayers, tSpawns, tGMs = {}, {}, {}, {}, {}
@@ -62,7 +64,6 @@ local soundNPC = 'NPC.wav'
 local soundPC = 'PC.wav'
 local soundPCEntered = 'PCEntered.wav'
 local soundPCLeft = 'PCLeft.wav'
-local myName = mq.TLO.Me.Name() or 'Unknown'
 local doBeep, doAlert, DoDrawArrow, haveSM, importZone, doSoundNPC, doSoundGM, doSoundPC, forceImport, doSoundPCEntered, doSoundPCLeft = false, false, false, false, false, false,
 	false, false, false, false, false
 local delay, remind, pcs, spawns, gms, announce, ignoreguild, radius, zradius, remindNPC, showAggro = 1, 30, true, true, true, false, true, 100, 100, 5, true
@@ -71,7 +72,7 @@ local AlertWindow_Show, AlertWindowOpen, SearchWindowOpen, SearchWindow_Show, sh
 local currentTab = "zone"
 local newSpawnName = ''
 local zSettings = false
-local theme = require('themes/themes')
+local theme = require('defaults.themes')
 local useThemeName = 'Default'
 local openConfigGUI = false
 local themeFile = mq.configDir .. '/MyThemeZ.lua'
@@ -108,8 +109,8 @@ local spawnListFlags = bit32.bor(
 	ImGuiTableFlags.ScrollX,
 	ImGuiTableFlags.Hideable
 )
-
-local GUI_Main = {
+Module.IsRunning = false
+Module.GUI_Main = {
 	Open    = false,
 	Show    = false,
 	Locked  = false,
@@ -173,7 +174,7 @@ local GUI_Main = {
 	},
 }
 
-local GUI_Alert = {
+Module.GUI_Alert = {
 	Open    = false,
 	Show    = false,
 	Locked  = false,
@@ -269,57 +270,33 @@ local function setVolume(volume)
 	winmm.waveOutSetVolume(nil, leftRightVolume)
 end
 -- helpers
-local MsgPrefix = function() return string.format('\aw[%s] [\a-tAlert Master\aw] ::\ax ', TLO.Time()) end
+local MsgPrefix = function() return string.format('\aw[\a-tAlert Master\aw] ::\ax ') end
 
 local GetCharZone = function()
-	return '\aw[\ao' .. myName .. '\aw] [\at' .. Zone.ShortName() .. '\aw] '
-end
-
----comment Check to see if the file we want to work on exists.
----@param name string -- Full Path to file
----@return boolean -- returns true if the file exists and false otherwise
-local function File_Exists(name)
-	local f = io.open(name, "r")
-	if f ~= nil then
-		io.close(f)
-		return true
-	else
-		return false
-	end
-end
-
--- local print_ts = function(msg) print(MsgPrefix()..msg) end
-local function print_ts(msg)
-	msg = MsgPrefix() .. msg
-	-- local useMyChat = mq.TLO.MyChatTlo ~= nil and true or false
-	-- if useMyChat then
-	-- 	mq.TLO.MyChatTlo('Alert Master', msg)
-	-- else
-	print(MsgPrefix() .. msg)
-	-- end
+	return '\aw[\ao' .. MyUI_CharLoaded .. '\aw] [\at' .. Zone.ShortName() .. '\aw] '
 end
 
 local function print_status()
-	print_ts('\ayAlert Status: ' .. tostring(active and 'on' or 'off'))
-	print_ts('\a-tPCs: \a-y' ..
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert Status: ' .. tostring(active and 'on' or 'off'))
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tPCs: \a-y' ..
 		tostring(pcs) ..
 		'\ax radius: \a-y' .. tostring(radius) .. '\ax zradius: \a-y' .. tostring(zradius) .. '\ax delay: \a-y' .. tostring(delay) ..
 		's\ax remind: \a-y' .. tostring(remind) .. ' seconds\ax')
-	print_ts('\a-tremindNPC: \a-y' .. tostring(remindNPC) .. '\at minutes\ax')
-	print_ts('\agClose Range\a-t Below: \a-g' .. tostring(DistColorRanges.orange) .. '\ax')
-	print_ts('\aoMid Range\a-t Between: \a-g' .. tostring(DistColorRanges.orange) .. '\a-t and \a-r' .. tostring(DistColorRanges.red) .. '\ax')
-	print_ts('\arLong Rage\a-t Greater than: \a-r' .. tostring(DistColorRanges.red) .. '\ax')
-	print_ts('\a-tAnnounce PCs: \a-y' .. tostring(announce) .. '\ax')
-	print_ts('\a-tSpawns (zone wide): \a-y' .. tostring(spawns) .. '\ax')
-	print_ts('\a-tGMs (zone wide): \a-y' .. tostring(gms) .. '\ax')
-	print_ts('\a-tPopup Alerts: \a-y' .. tostring(doAlert) .. '\ax')
-	print_ts('\a-tBeep: \a-y' .. tostring(doBeep) .. '\ax')
-	print_ts('\a-tSound PC Alerts: \a-y' .. tostring(doSoundPC) .. '\ax')
-	print_ts('\a-tSound NPC Alerts: \a-y' .. tostring(doSoundNPC) .. '\ax')
-	print_ts('\a-tSound GM Alerts: \a-y' .. tostring(doSoundGM) .. '\ax')
-	print_ts('\a-tVolume PC Alerts: \a-y' .. tostring(volPC) .. '\ax')
-	print_ts('\a-tVolume NPC Alerts: \a-y' .. tostring(volNPC) .. '\ax')
-	print_ts('\a-tVolume GM Alerts: \a-y' .. tostring(volGM) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tremindNPC: \a-y' .. tostring(remindNPC) .. '\at minutes\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\agClose Range\a-t Below: \a-g' .. tostring(DistColorRanges.orange) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\aoMid Range\a-t Between: \a-g' .. tostring(DistColorRanges.orange) .. '\a-t and \a-r' .. tostring(DistColorRanges.red) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\arLong Rage\a-t Greater than: \a-r' .. tostring(DistColorRanges.red) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tAnnounce PCs: \a-y' .. tostring(announce) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tSpawns (zone wide): \a-y' .. tostring(spawns) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tGMs (zone wide): \a-y' .. tostring(gms) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tPopup Alerts: \a-y' .. tostring(doAlert) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tBeep: \a-y' .. tostring(doBeep) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tSound PC Alerts: \a-y' .. tostring(doSoundPC) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tSound NPC Alerts: \a-y' .. tostring(doSoundNPC) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tSound GM Alerts: \a-y' .. tostring(doSoundGM) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tVolume PC Alerts: \a-y' .. tostring(volPC) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tVolume NPC Alerts: \a-y' .. tostring(volNPC) .. '\ax')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-tVolume GM Alerts: \a-y' .. tostring(volGM) .. '\ax')
 end
 
 local save_settings = function()
@@ -358,7 +335,7 @@ local function import_spawnmaster(val)
 end
 
 local function load_settings()
-	if File_Exists(settings_path) then
+	if MyUI_Utils.File.Exists(settings_path) then
 		settings = LIP.load(settings_path)
 	else
 		settings = {
@@ -368,17 +345,17 @@ local function load_settings()
 		}
 		save_settings()
 	end
-	if File_Exists(themeFile) then
+	if MyUI_Utils.File.Exists(themeFile) then
 		theme = dofile(themeFile)
 	end
 
-	if File_Exists(smSettings) then
+	if MyUI_Utils.File.Exists(smSettings) then
 		spawnsSpawnMaster = LIP.loadSM(smSettings)
 		haveSM = true
 		importZone = true
 	end
 
-	if File_Exists(smImportList) then
+	if MyUI_Utils.File.Exists(smImportList) then
 		importedZones = dofile(smImportList)
 	end
 
@@ -408,8 +385,8 @@ local function load_settings()
 	settings[CharConfig]['beep'] = doBeep
 	DoDrawArrow = settings[CharConfig]['arrows'] or false
 	settings[CharConfig]['arrows'] = DoDrawArrow
-	GUI_Main.Locked = settings[CharConfig]['locked'] or false
-	settings[CharConfig]['locked'] = GUI_Main.Locked
+	Module.GUI_Main.Locked = settings[CharConfig]['locked'] or false
+	settings[CharConfig]['locked'] = Module.GUI_Main.Locked
 	doAlert = settings[CharConfig]['popup'] or false
 	settings[CharConfig]['popup'] = doAlert
 	showAggro = settings[CharConfig]['aggro'] or false
@@ -445,7 +422,7 @@ local function load_settings()
 	volPCLeft = settings[CharConfig]['volPCLeft'] or volPCLeft
 	settings[CharConfig]['volPCLeft'] = volPCLeft
 	save_settings()
-	if GUI_Main.Locked then
+	if Module.GUI_Main.Locked then
 		SearchWindow_Show = true
 		SearchWindowOpen = true
 	else
@@ -459,13 +436,13 @@ end
 local function ColorDistance(distance)
 	if distance < DistColorRanges.orange then
 		-- Green color for Close Range
-		return COLOR.color('green')
+		return MyUI_Colors.color('green')
 	elseif distance >= DistColorRanges.orange and distance <= DistColorRanges.red then
 		-- Orange color for Mid Range
-		return COLOR.color('orange')
+		return MyUI_Colors.color('orange')
 	else
 		-- Red color for Far Distance
-		return COLOR.color('red')
+		return MyUI_Colors.color('red')
 	end
 end
 
@@ -519,10 +496,10 @@ local function InsertTableSpawn(dataTable, spawn, id, opts)
 end
 
 local function TableSortSpecs(a, b)
-	for i = 1, GUI_Main.Table.SortSpecs.SpecsCount do
-		local spec = GUI_Main.Table.SortSpecs:Specs(i)
+	for i = 1, Module.GUI_Main.Table.SortSpecs.SpecsCount do
+		local spec = Module.GUI_Main.Table.SortSpecs:Specs(i)
 		local delta = 0
-		if spec.ColumnUserID == GUI_Main.Table.Column_ID.MobName then
+		if spec.ColumnUserID == Module.GUI_Main.Table.Column_ID.MobName then
 			if a.MobName and b.MobName then
 				if a.MobName < b.MobName then
 					delta = -1
@@ -532,7 +509,7 @@ local function TableSortSpecs(a, b)
 			else
 				return 0
 			end
-		elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobID then
+		elseif spec.ColumnUserID == Module.GUI_Main.Table.Column_ID.MobID then
 			if a.MobID and b.MobID then
 				if a.MobID < b.MobID then
 					delta = -1
@@ -542,7 +519,7 @@ local function TableSortSpecs(a, b)
 			else
 				return 0
 			end
-		elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobLvl then
+		elseif spec.ColumnUserID == Module.GUI_Main.Table.Column_ID.MobLvl then
 			if a.MobLvl and b.MobLvl then
 				if a.MobLvl < b.MobLvl then
 					delta = -1
@@ -552,7 +529,7 @@ local function TableSortSpecs(a, b)
 			else
 				return 0
 			end
-		elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobDist then
+		elseif spec.ColumnUserID == Module.GUI_Main.Table.Column_ID.MobDist then
 			if a.MobDist and b.MobDist then
 				if a.MobDist < b.MobDist then
 					delta = -1
@@ -562,7 +539,7 @@ local function TableSortSpecs(a, b)
 			else
 				return 0
 			end
-		elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.MobAggro then
+		elseif spec.ColumnUserID == Module.GUI_Main.Table.Column_ID.MobAggro then
 			if a.MobAggro and b.MobAggro then
 				if a.MobAggro < b.MobAggro then
 					delta = -1
@@ -572,7 +549,7 @@ local function TableSortSpecs(a, b)
 			else
 				return 0
 			end
-		elseif spec.ColumnUserID == GUI_Main.Table.Column_ID.Action then
+		elseif spec.ColumnUserID == Module.GUI_Main.Table.Column_ID.Action then
 			if a.Enum_Action < b.Enum_Action then
 				delta = -1
 			elseif a.Enum_Action > b.Enum_Action then
@@ -591,10 +568,10 @@ local function TableSortSpecs(a, b)
 end
 
 local function AlertTableSortSpecs(a, b)
-	for i = 1, GUI_Alert.Table.SortSpecs.SpecsCount do
-		local spec = GUI_Alert.Table.SortSpecs:Specs(i)
+	for i = 1, Module.GUI_Alert.Table.SortSpecs.SpecsCount do
+		local spec = Module.GUI_Alert.Table.SortSpecs:Specs(i)
 		local delta = 0
-		if spec.ColumnUserID == GUI_Alert.Table.Column_ID.MobName then
+		if spec.ColumnUserID == Module.GUI_Alert.Table.Column_ID.MobName then
 			if a.MobName and b.MobName then
 				if a.MobName < b.MobName then
 					delta = -1
@@ -604,7 +581,7 @@ local function AlertTableSortSpecs(a, b)
 			else
 				return 0
 			end
-		elseif spec.ColumnUserID == GUI_Alert.Table.Column_ID.MobDist then
+		elseif spec.ColumnUserID == Module.GUI_Alert.Table.Column_ID.MobDist then
 			if a.MobDist and b.MobDist then
 				if math.floor(mq.TLO.Spawn(a.MobID).Distance()) < math.floor(mq.TLO.Spawn(b.MobID).Distance()) then
 					delta = -1
@@ -628,7 +605,7 @@ end
 
 local function RefreshUnhandled()
 	local splitSearch = {}
-	for part in string.gmatch(GUI_Main.Search, '[^%s]+') do
+	for part in string.gmatch(Module.GUI_Main.Search, '[^%s]+') do
 		table.insert(splitSearch, part)
 	end
 	local newTable = {}
@@ -642,8 +619,8 @@ local function RefreshUnhandled()
 		if #splitSearch == found then table.insert(newTable, v) end
 	end
 	Table_Cache.Unhandled = newTable
-	GUI_Main.Refresh.Sort.Rules = true
-	GUI_Main.Refresh.Table.Unhandled = true
+	Module.GUI_Main.Refresh.Sort.Rules = true
+	Module.GUI_Main.Refresh.Table.Unhandled = true
 end
 
 local function RefreshAlerts()
@@ -660,8 +637,8 @@ local function RefreshAlerts()
 		if #tmp > 0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
 	end
 	Table_Cache.Alerts = newTable
-	GUI_Alert.Refresh.Sort.Alerts = true
-	GUI_Alert.Refresh.Table.Alerts = false
+	Module.GUI_Alert.Refresh.Sort.Alerts = true
+	Module.GUI_Alert.Refresh.Table.Alerts = false
 end
 
 local function RefreshZone()
@@ -672,9 +649,9 @@ local function RefreshZone()
 		local spawn = npcs[i]
 		if #npcs > 0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
 	end
-	for i = 1, ME.XTargetSlots() do
-		if ME.XTarget(i)() ~= nil and ME.XTarget(i)() ~= 0 then
-			local spawn = ME.XTarget(i)
+	for i = 1, mq.TLO.Me.XTargetSlots() do
+		if mq.TLO.Me.XTarget(i)() ~= nil and mq.TLO.Me.XTarget(i)() ~= 0 then
+			local spawn = mq.TLO.Me.XTarget(i)
 			if spawn.ID() > 0 then InsertTableSpawn(xTarTable, spawn, tonumber(spawn.ID())) end
 		end
 	end
@@ -693,8 +670,8 @@ local function RefreshZone()
 	end
 	Table_Cache.Rules = newTable
 	Table_Cache.Mobs = newTable
-	GUI_Main.Refresh.Sort.Mobs = true
-	GUI_Main.Refresh.Table.Mobs = false
+	Module.GUI_Main.Refresh.Sort.Mobs = true
+	Module.GUI_Main.Refresh.Table.Mobs = false
 end
 
 -----------------------
@@ -712,7 +689,7 @@ local should_include_player = function(spawn)
 	-- if pc is in group, raid or (optionally) guild, skip
 	local in_group = Group.Members() ~= nil and Group.Member(name).Index() ~= nil
 	local in_raid = Raid.Members() > 0 and Raid.Member(name)() ~= nil
-	local in_guild = ignoreguild and ME.Guild() ~= nil and ME.Guild() == guild
+	local in_guild = ignoreguild and MyUI_Guild ~= nil and MyUI_Guild == guild
 	if in_group or in_raid or in_guild then return false end
 	return true
 end
@@ -720,8 +697,8 @@ end
 local run_char_commands = function()
 	if settings[CharCommands] ~= nil then
 		for k, cmd in pairs(settings[CharCommands]) do
-			CMD(cmd)
-			print_ts(string.format('Ran command: "%s"', cmd))
+			mq.cmdf(cmd)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, string.format('Ran command: "%s"', cmd))
 		end
 	end
 end
@@ -778,7 +755,7 @@ local check_for_gms = function()
 			for name, v in pairs(tmp) do
 				if tGMs[name] == nil then
 					tGMs[name] = v
-					print_ts(GetCharZone() .. v.name .. ' ' .. v.guild .. ' entered the zone. ' .. v.distance .. ' units away.')
+					MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' ' .. v.guild .. ' entered the zone. ' .. v.distance .. ' units away.')
 					if doSoundGM then
 						setVolume(volGM)
 						playSound(soundGM)
@@ -789,14 +766,14 @@ local check_for_gms = function()
 						setVolume(volGM)
 						playSound(soundGM)
 					end
-					print_ts(GetCharZone() .. v.name .. ' loitering ' .. v.distance .. ' units away.')
+					MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' loitering ' .. v.distance .. ' units away.')
 				end
 			end
 			if tGMs ~= nil then
 				for name, v in pairs(tGMs) do
 					if tmp[name] == nil then
 						tGMs[name] = nil
-						print_ts(GetCharZone() .. v.name .. ' left the zone.')
+						MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' left the zone.')
 					end
 				end
 			end
@@ -806,13 +783,13 @@ end
 
 local check_for_pcs = function()
 	if active and pcs then
-		local tmp = spawn_search_players('pc radius ' .. radius .. ' zradius ' .. zradius .. ' notid ' .. ME.ID())
-		local charZone = '\aw[\a-o' .. myName .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
+		local tmp = spawn_search_players('pc radius ' .. radius .. ' zradius ' .. zradius .. ' notid ' .. mq.TLO.Me.ID())
+		local charZone = '\aw[\a-o' .. MyUI_CharLoaded .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tPlayers[name] == nil then
 					tPlayers[name] = v
-					print_ts(GetCharZone() .. v.name .. ' ' .. v.guild .. ' entered the alert radius. ' .. v.distance .. ' units away.')
+					MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' ' .. v.guild .. ' entered the alert radius. ' .. v.distance .. ' units away.')
 					if doSoundPC then
 						setVolume(volPC)
 						playSound(soundPC)
@@ -824,7 +801,7 @@ local check_for_pcs = function()
 						setVolume(volPC)
 						playSound(soundPC)
 					end
-					print_ts(GetCharZone() .. v.name .. ' loitering ' .. v.distance .. ' units away.')
+					MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' loitering ' .. v.distance .. ' units away.')
 					run_char_commands()
 				end
 			end
@@ -832,7 +809,7 @@ local check_for_pcs = function()
 				for name, v in pairs(tPlayers) do
 					if tmp[name] == nil then
 						tPlayers[name] = nil
-						print_ts(GetCharZone() .. v.name .. ' left the alert radius.')
+						MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' left the alert radius.')
 					end
 				end
 			end
@@ -842,9 +819,8 @@ end
 
 local check_for_spawns = function()
 	if active and spawns then
-		local tmp = spawn_search_npcs()
 		local spawnAlertsUpdated, tableUpdate = false, false
-		local charZone = '\aw[\a-o' .. myName .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
+		local charZone = '\aw[\a-o' .. MyUI_CharLoaded .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
 		if haveSM and (importZone or forceImport) then
 			local counter = 0
 			local tmpSpawnMaster = {}
@@ -872,14 +848,16 @@ local check_for_spawns = function()
 				importZone = false
 				forceImport = false
 				mq.pickle(smImportList, importedZones)
-				print_ts(string.format('\aw[\atAlert Master\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter))
+				MyUI_Utils.PrintOutput('AlertMaster', nil, string.format('\aw[\atAlert Master\aw] \agImported \aw[\ay%d\aw]\ag Spawn Master Spawns...', counter))
 			end
 		end
+		local tmp = spawn_search_npcs()
 		if tmp ~= nil then
 			for id, v in pairs(tmp) do
 				if tSpawns[id] == nil then
 					if check_safe_zone() ~= true then
-						print_ts(GetCharZone() .. '\ag' .. tostring(v.DisplayName()) .. '\ax spawn alert! ' .. tostring(math.floor(v.Distance() or 0)) .. ' units away.')
+						MyUI_Utils.PrintOutput('AlertMaster', nil,
+							GetCharZone() .. '\ag' .. tostring(v.DisplayName()) .. '\ax spawn alert! ' .. tostring(math.floor(v.Distance() or 0)) .. ' units away.')
 						spawnAlertsUpdated = true
 					end
 					tableUpdate = true
@@ -893,7 +871,7 @@ local check_for_spawns = function()
 					if tmp[id] == nil then
 						if check_safe_zone() ~= true then
 							if v.DisplayName ~= nil then
-								print_ts(GetCharZone() .. '\ag' .. tostring(v.DisplayName) .. '\ax was killed or despawned.')
+								MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. '\ag' .. tostring(v.DisplayName) .. '\ax was killed or despawned.')
 							end
 							spawnAlertsUpdated = false
 						end
@@ -922,7 +900,7 @@ local check_for_spawns = function()
 							setVolume(volNPC)
 							playSound(soundNPC)
 						else
-							CMD('/beep')
+							mq.cmdf('/beep')
 						end
 					end
 				end
@@ -936,13 +914,13 @@ end
 
 local check_for_announce = function()
 	if active and announce then
-		local tmp = spawn_search_players('pc notid ' .. ME.ID())
-		local charZone = '\aw[\a-o' .. myName .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
+		local tmp = spawn_search_players('pc notid ' .. mq.TLO.Me.ID())
+		local charZone = '\aw[\a-o' .. MyUI_CharLoaded .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tAnnounce[name] == nil then
 					tAnnounce[name] = v
-					print_ts(GetCharZone() .. v.name .. ' ' .. v.guild .. ' entered the zone.')
+					MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' ' .. v.guild .. ' entered the zone.')
 					if doSoundPCEntered then
 						setVolume(volPCEntered)
 						playSound(soundPCEntered)
@@ -953,7 +931,7 @@ local check_for_announce = function()
 				for name, v in pairs(tAnnounce) do
 					if tmp[name] == nil then
 						tAnnounce[name] = nil
-						print_ts(GetCharZone() .. v.name .. ' left the zone.')
+						MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. v.name .. ' left the zone.')
 						if doSoundPCLeft then
 							setVolume(volPCLeft)
 							playSound(soundPCLeft)
@@ -1003,7 +981,7 @@ end
 
 -- Tighter relative direction code for when I make better arrows.
 local function getRelativeDirection(spawnDir)
-	local meHeading = directions(ME.Heading())
+	local meHeading = directions(mq.TLO.Me.Heading())
 	local spawnHeadingTo = directions(spawnDir)
 	local difference = spawnHeadingTo - meHeading
 	difference = (difference + 360) % 360
@@ -1067,12 +1045,12 @@ local function DrawTheme(tName)
 end
 
 local function DrawToggles()
-	local lockedIcon = GUI_Main.Locked and Icons.FA_LOCK .. '##lockTabButton' or
-		Icons.FA_UNLOCK .. '##lockTablButton'
+	local lockedIcon = Module.GUI_Main.Locked and MyUI_Icons.FA_LOCK .. '##lockTabButton' or
+		MyUI_Icons.FA_UNLOCK .. '##lockTablButton'
 	if ImGui.SmallButton(lockedIcon) then
 		--ImGuiWindowFlags.NoMove
-		GUI_Main.Locked = not GUI_Main.Locked
-		settings[CharConfig]['locked'] = GUI_Main.Locked
+		Module.GUI_Main.Locked = not Module.GUI_Main.Locked
+		settings[CharConfig]['locked'] = Module.GUI_Main.Locked
 		save_settings()
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1081,7 +1059,7 @@ local function DrawToggles()
 		ImGui.EndTooltip()
 	end
 	ImGui.SameLine()
-	local gIcon = Icons.MD_SETTINGS
+	local gIcon = MyUI_Icons.MD_SETTINGS
 	if ImGui.SmallButton(gIcon) then
 		openConfigGUI = not openConfigGUI
 		save_settings()
@@ -1095,12 +1073,12 @@ local function DrawToggles()
 	ImGui.SameLine()
 	-- Alert Popup Toggle Button
 	if doAlert then
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.SmallButton(Icons.MD_ALARM) then CMD('/am doalert') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
+		if ImGui.SmallButton(MyUI_Icons.MD_ALARM) then mq.cmdf('/am doalert') end
 		ImGui.PopStyleColor(1)
 	else
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.Button(Icons.MD_ALARM_OFF) then CMD('/am doalert') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_red')) -- Red for disabled
+		if ImGui.Button(MyUI_Icons.MD_ALARM_OFF) then mq.cmdf('/am doalert') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1111,12 +1089,12 @@ local function DrawToggles()
 	ImGui.SameLine()
 	-- Beep Alert Toggle Button
 	if doBeep then
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.SmallButton(Icons.FA_BELL_O) then CMD('/am beep') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
+		if ImGui.SmallButton(MyUI_Icons.FA_BELL_O) then mq.cmdf('/am beep') end
 		ImGui.PopStyleColor(1)
 	else
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.Button(Icons.FA_BELL_SLASH_O) then CMD('/am beep') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_red')) -- Red for disabled
+		if ImGui.Button(MyUI_Icons.FA_BELL_SLASH_O) then mq.cmdf('/am beep') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1127,12 +1105,12 @@ local function DrawToggles()
 	ImGui.SameLine()
 	-- Alert Window Toggle Button
 	if AlertWindowOpen then
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.SmallButton(Icons.MD_VISIBILITY) then CMD('/am popup') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
+		if ImGui.SmallButton(MyUI_Icons.MD_VISIBILITY) then mq.cmdf('/am popup') end
 		ImGui.PopStyleColor(1)
 	else
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for inactive state
-		if ImGui.SmallButton(Icons.MD_VISIBILITY_OFF) then CMD('/am popup') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_red')) -- Red for inactive state
+		if ImGui.SmallButton(MyUI_Icons.MD_VISIBILITY_OFF) then mq.cmdf('/am popup') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1142,8 +1120,8 @@ local function DrawToggles()
 	end
 	ImGui.SameLine()
 	-- Button to add the new spawn
-	if ImGui.SmallButton(Icons.FA_HASHTAG) then
-		CMD('/am spawnadd ${Target}')
+	if ImGui.SmallButton(MyUI_Icons.FA_HASHTAG) then
+		mq.cmdf('/am spawnadd ${Target}')
 		npcs = settings[Zone.ShortName()] or {}
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1153,8 +1131,8 @@ local function DrawToggles()
 	end
 	ImGui.SameLine()
 	-- Button to add the new spawn
-	if ImGui.SmallButton(Icons.FA_BULLSEYE) then
-		CMD('/am spawnadd "${Target.DisplayName}"')
+	if ImGui.SmallButton(MyUI_Icons.FA_BULLSEYE) then
+		mq.cmdf('/am spawnadd "${Target.DisplayName}"')
 		npcs = settings[Zone.ShortName()] or {}
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1165,15 +1143,15 @@ local function DrawToggles()
 	ImGui.SameLine(ImGui.GetWindowWidth() - 120)
 	-- Arrow Status Toggle Button
 	if DoDrawArrow then
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.SmallButton(Icons.FA_ARROW_UP) then
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
+		if ImGui.SmallButton(MyUI_Icons.FA_ARROW_UP) then
 			DoDrawArrow, settings[CharConfig]['arrows'] = false, false
 			save_settings()
 		end
 		ImGui.PopStyleColor(1)
 	else
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.SmallButton(Icons.FA_ARROW_DOWN) then
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_red')) -- Red for disabled
+		if ImGui.SmallButton(MyUI_Icons.FA_ARROW_DOWN) then
 			DoDrawArrow, settings[CharConfig]['arrows'] = true, true
 			save_settings()
 		end
@@ -1187,12 +1165,12 @@ local function DrawToggles()
 	ImGui.SameLine(ImGui.GetWindowWidth() - 90)
 	-- Aggro Status Toggle Button
 	if showAggro then
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.SmallButton(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
+		if ImGui.SmallButton(MyUI_Icons.MD_PRIORITY_HIGH) then mq.cmdf('/am aggro') end
 		ImGui.PopStyleColor(1)
 	else
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.SmallButton(Icons.MD_PRIORITY_HIGH) then CMD('/am aggro') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_red')) -- Red for disabled
+		if ImGui.SmallButton(MyUI_Icons.MD_PRIORITY_HIGH) then mq.cmdf('/am aggro') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1203,12 +1181,12 @@ local function DrawToggles()
 	ImGui.SameLine(ImGui.GetWindowWidth() - 60)
 	-- Alert Master Scanning Toggle Button
 	if active then
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_green')) -- Green for enabled
-		if ImGui.SmallButton(Icons.FA_HEARTBEAT) then CMD('/am off') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
+		if ImGui.SmallButton(MyUI_Icons.FA_HEARTBEAT) then mq.cmdf('/am off') end
 		ImGui.PopStyleColor(1)
 	else
-		ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red')) -- Red for disabled
-		if ImGui.SmallButton(Icons.MD_DO_NOT_DISTURB) then CMD('/am on') end
+		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_red')) -- Red for disabled
+		if ImGui.SmallButton(MyUI_Icons.MD_DO_NOT_DISTURB) then mq.cmdf('/am on') end
 		ImGui.PopStyleColor(1)
 	end
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1220,9 +1198,9 @@ local function DrawToggles()
 	-- Place a help icon
 	ImGui.SameLine(ImGui.GetWindowWidth() - 30) -- Position at right end of line.
 	if showTooltips then
-		ImGui.Text(Icons.MD_HELP)
+		ImGui.Text(MyUI_Icons.MD_HELP)
 	else
-		ImGui.Text(Icons.MD_HELP_OUTLINE)
+		ImGui.Text(MyUI_Icons.MD_HELP_OUTLINE)
 	end
 	if ImGui.IsItemHovered() then
 		ImGui.SetTooltip("Right-Click.\nTo toggle Tooltips.")
@@ -1238,7 +1216,7 @@ local function addSpawnToList(name)
 	-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
 	for k, v in pairs(settings[zone]) do
 		if settings[zone][k] == name then
-			print_ts("\aySpawn alert \"" .. name .. "\" already exists.")
+			MyUI_Utils.PrintOutput('AlertMaster', nil, "\aySpawn alert \"" .. name .. "\" already exists.")
 			return
 		end
 		sCount = sCount + 1
@@ -1246,13 +1224,13 @@ local function addSpawnToList(name)
 	-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
 	settings[zone]['Spawn' .. sCount + 1] = name
 	save_settings()
-	print_ts('\ayAdded spawn alert for ' .. name .. ' in ' .. zone)
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAdded spawn alert for ' .. name .. ' in ' .. zone)
 end
 
 local function DrawRuleRow(entry)
 	ImGui.TableNextColumn()
 	-- Add to Spawn List Button
-	if ImGui.SmallButton(Icons.FA_USER_PLUS) then addSpawnToList(entry.MobName) end
+	if ImGui.SmallButton(MyUI_Icons.FA_USER_PLUS) then addSpawnToList(entry.MobName) end
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Add to Spawn List")
@@ -1269,16 +1247,16 @@ local function DrawRuleRow(entry)
 	-- Right-click interaction uses the original spawnName
 	if ImGui.IsItemHovered() then
 		if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
-			CMDF("/noparse %s/docommand /timed ${Math.Rand[5,25]} /nav id %s", groupCmd, entry.MobID)
+			mq.cmdf("/noparse %s/docommand /timed ${Math.Rand[5,25]} /nav id %s", groupCmd, entry.MobID)
 		elseif
 			ImGui.IsMouseReleased(1) then
-			CMDF('/nav id %s', entry.MobID)
+			mq.cmdf('/nav id %s', entry.MobID)
 		end
 	end
 	ImGui.SameLine()
 	ImGui.TableNextColumn()
 	--Consider Color for Level Text
-	ImGui.PushStyleColor(ImGuiCol.Text, COLOR.color(entry.MobConColor))
+	ImGui.PushStyleColor(ImGuiCol.Text, MyUI_Colors.color(entry.MobConColor))
 	ImGui.Text('%s', (entry.MobLvl))
 	ImGui.PopStyleColor()
 	ImGui.TableNextColumn()
@@ -1291,7 +1269,7 @@ local function DrawRuleRow(entry)
 	--Mob Aggro
 	if entry.MobAggro ~= 0 then
 		local pctAggro = tonumber(entry.MobAggro) / 100
-		ImGui.PushStyleColor(ImGuiCol.PlotHistogram, COLOR.color('red'))
+		ImGui.PushStyleColor(ImGuiCol.PlotHistogram, MyUI_Colors.color('red'))
 		ImGui.ProgressBar(pctAggro, ImGui.GetColumnWidth(), 15)
 		ImGui.PopStyleColor()
 	else
@@ -1317,7 +1295,7 @@ local function DrawAlertRuleRow(entry)
 	local sHeadingTo = entry.MobDirection
 
 	ImGui.TableSetColumnIndex(0)
-	ImGui.PushStyleColor(ImGuiCol.Text, COLOR.color('green'))
+	ImGui.PushStyleColor(ImGuiCol.Text, MyUI_Colors.color('green'))
 	ImGui.Text(entry.MobName)
 	ImGui.PopStyleColor(1)
 	if ImGui.IsItemHovered() and showTooltips then
@@ -1327,10 +1305,10 @@ local function DrawAlertRuleRow(entry)
 	end
 	if ImGui.IsItemHovered() then
 		if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
-			CMDF('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s', groupCmd, entry.MobID)
+			mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav id %s', groupCmd, entry.MobID)
 		elseif
 			ImGui.IsMouseReleased(1) then
-			CMDF('/nav id %s', entry.MobID)
+			mq.cmdf('/nav id %s', entry.MobID)
 		end
 	end
 	ImGui.TableSetColumnIndex(1)
@@ -1345,19 +1323,19 @@ local function DrawAlertRuleRow(entry)
 	DrawArrow(ImVec2(cursorScreenPos.x + 10, cursorScreenPos.y), 5, 15, ColorDistance(distance))
 	--end
 end
-local btnIconDel = Icons.MD_DELETE
+local btnIconDel = MyUI_Icons.MD_DELETE
 local function DrawSearchWindow()
 	if currZone ~= lastZone then return end
-	if GUI_Main.Locked then
-		GUI_Main.Flags = bit32.bor(GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
+	if Module.GUI_Main.Locked then
+		Module.GUI_Main.Flags = bit32.bor(Module.GUI_Main.Flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
 	else
-		GUI_Main.Flags = bit32.band(GUI_Main.Flags, bit32.bnot(ImGuiWindowFlags.NoMove), bit32.bnot(ImGuiWindowFlags.NoResize))
+		Module.GUI_Main.Flags = bit32.band(Module.GUI_Main.Flags, bit32.bnot(ImGuiWindowFlags.NoMove), bit32.bnot(ImGuiWindowFlags.NoResize))
 	end
 	if SearchWindowOpen then
 		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		local ColorCount, StyleCount = DrawTheme(useThemeName)
 		if ZoomLvl > 1.25 then ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 4, 7) end
-		SearchWindowOpen = ImGui.Begin("Alert Master##" .. myName, SearchWindowOpen, GUI_Main.Flags)
+		SearchWindowOpen = ImGui.Begin("Alert Master##" .. MyUI_CharLoaded, SearchWindowOpen, Module.GUI_Main.Flags)
 		ImGui.BeginMenuBar()
 		ImGui.SetWindowFontScale(ZoomLvl)
 		DrawToggles()
@@ -1380,8 +1358,8 @@ local function DrawSearchWindow()
 		ImGui.SameLine()
 		local tabLabel = "NPC List"
 		if next(spawnAlerts) ~= nil then
-			tabLabel = Icons.FA_BULLHORN .. " NPC List " .. Icons.FA_BULLHORN
-			ImGui.PushStyleColor(ImGuiCol.Button, COLOR.color('btn_red'))
+			tabLabel = MyUI_Icons.FA_BULLHORN .. " NPC List " .. MyUI_Icons.FA_BULLHORN
+			ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_red'))
 			if ImGui.Button(tabLabel) then
 				currentTab = "npcList"
 			end
@@ -1395,44 +1373,44 @@ local function DrawSearchWindow()
 		end
 
 		if currentTab == "zone" then
-			local searchText, selected = ImGui.InputText("Search##RulesSearch", GUI_Main.Search)
+			local searchText, selected = ImGui.InputText("Search##RulesSearch", Module.GUI_Main.Search)
 			-- ImGui.PopItemWidth()
-			if selected and GUI_Main.Search ~= searchText then
-				GUI_Main.Search = searchText
-				GUI_Main.Refresh.Sort.Rules = true
-				GUI_Main.Refresh.Table.Unhandled = true
+			if selected and Module.GUI_Main.Search ~= searchText then
+				Module.GUI_Main.Search = searchText
+				Module.GUI_Main.Refresh.Sort.Rules = true
+				Module.GUI_Main.Refresh.Table.Unhandled = true
 			end
 			ImGui.SameLine()
 			if ImGui.Button("Clear##ClearRulesSearch") then
-				GUI_Main.Search = ''
-				GUI_Main.Refresh.Sort.Rules = false
-				GUI_Main.Refresh.Table.Unhandled = true
+				Module.GUI_Main.Search = ''
+				Module.GUI_Main.Refresh.Sort.Rules = false
+				Module.GUI_Main.Refresh.Table.Unhandled = true
 			end
 			ImGui.Separator()
 			local sizeX = ImGui.GetContentRegionAvail() - 4
 			ImGui.SetWindowFontScale(ZoomLvl)
-			if ImGui.BeginTable('##RulesTable', 8, GUI_Main.Table.Flags) then
+			if ImGui.BeginTable('##RulesTable', 8, Module.GUI_Main.Table.Flags) then
 				ImGui.TableSetupScrollFreeze(0, 1)
-				ImGui.TableSetupColumn(Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, GUI_Main.Table.Column_ID.Remove)
-				ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, GUI_Main.Table.Column_ID.MobName)
-				ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobLvl)
-				ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, GUI_Main.Table.Column_ID.MobDist)
-				ImGui.TableSetupColumn("Aggro", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobAggro)
-				ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, GUI_Main.Table.Column_ID.MobID)
-				ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, GUI_Main.Table.Column_ID.MobLoc)
-				ImGui.TableSetupColumn(Icons.FA_COMPASS, bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.WidthFixed), 15,
-					GUI_Main.Table.Column_ID.MobDirection)
+				ImGui.TableSetupColumn(MyUI_Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, Module.GUI_Main.Table.Column_ID.Remove)
+				ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, Module.GUI_Main.Table.Column_ID.MobName)
+				ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, Module.GUI_Main.Table.Column_ID.MobLvl)
+				ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, Module.GUI_Main.Table.Column_ID.MobDist)
+				ImGui.TableSetupColumn("Aggro", ImGuiTableColumnFlags.DefaultSort, 30, Module.GUI_Main.Table.Column_ID.MobAggro)
+				ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, Module.GUI_Main.Table.Column_ID.MobID)
+				ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, Module.GUI_Main.Table.Column_ID.MobLoc)
+				ImGui.TableSetupColumn(MyUI_Icons.FA_COMPASS, bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.WidthFixed), 15,
+					Module.GUI_Main.Table.Column_ID.MobDirection)
 				ImGui.TableHeadersRow()
 				local sortSpecs = ImGui.TableGetSortSpecs()
 
-				if sortSpecs and (sortSpecs.SpecsDirty or GUI_Main.Refresh.Sort.Rules) then
+				if sortSpecs and (sortSpecs.SpecsDirty or Module.GUI_Main.Refresh.Sort.Rules) then
 					if #Table_Cache.Unhandled > 0 then
-						GUI_Main.Table.SortSpecs = sortSpecs
+						Module.GUI_Main.Table.SortSpecs = sortSpecs
 						table.sort(Table_Cache.Unhandled, TableSortSpecs)
-						GUI_Main.Table.SortSpecs = nil
+						Module.GUI_Main.Table.SortSpecs = nil
 					end
 					sortSpecs.SpecsDirty = false
-					GUI_Main.Refresh.Sort.Rules = false
+					Module.GUI_Main.Refresh.Sort.Rules = false
 				end
 				local clipper = ImGuiListClipper.new()
 				clipper:Begin(#Table_Cache.Unhandled)
@@ -1462,7 +1440,7 @@ local function DrawSearchWindow()
 			end
 			ImGui.SameLine()
 			-- Button to add the new spawn
-			if ImGui.Button(Icons.FA_USER_PLUS) and newSpawnName ~= "" then
+			if ImGui.Button(MyUI_Icons.FA_USER_PLUS) and newSpawnName ~= "" then
 				-- CMD('/am spawnadd "'..newSpawnName..'"')
 				addSpawnToList(newSpawnName)
 				newSpawnName = "" -- Clear the input text after adding
@@ -1534,10 +1512,10 @@ local function DrawSearchWindow()
 							-- Right-click interaction uses the original spawnName
 							if ImGui.IsItemHovered() then
 								if ImGui.IsKeyDown(ImGuiMod.Ctrl) and ImGui.IsMouseReleased(1) then
-									CMDF('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav spawn "%s"', groupCmd, spawnName)
+									mq.cmdf('/noparse %s/docommand /timed ${Math.Rand[10,60]} /nav spawn "%s"', groupCmd, spawnName)
 								elseif
 									ImGui.IsMouseReleased(1) then
-									CMDF('/nav spawn "%s"', spawnName)
+									mq.cmdf('/nav spawn "%s"', spawnName)
 								end
 							end
 						end
@@ -1547,7 +1525,7 @@ local function DrawSearchWindow()
 						local buttonLabel = btnIconDel .. "##AM_Remove" .. tostring(index)
 						ImGui.TableNextColumn()
 						if ImGui.SmallButton(buttonLabel) then
-							CMD('/am spawndel "' .. spawnName .. '"')
+							mq.cmdf('/am spawndel "' .. spawnName .. '"')
 						end
 						if ImGui.IsItemHovered() and showTooltips then
 							ImGui.BeginTooltip()
@@ -1568,274 +1546,269 @@ local function DrawSearchWindow()
 	end
 end
 
-local function Config_GUI(open)
+local function Config_GUI()
 	if not openConfigGUI then return end
 	ColorCountConf = 0
 	StyleCountConf = 0
 	-- local themeName = theme.LoadTheme or 'notheme'
 	ColorCountConf, StyleCountConf = DrawTheme(useThemeName)
 
-	open, openConfigGUI = ImGui.Begin("Alert master Config", open, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.NoCollapse))
+	local open, drawConfigGUI = ImGui.Begin("Alert master Config", true, bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.NoCollapse))
 	ImGui.SetWindowFontScale(ZoomLvl)
-	if not openConfigGUI then
+	if not open then
+		drawConfigGUI = false
 		openConfigGUI = false
-		open = false
-		if StyleCountConf > 0 then ImGui.PopStyleVar(StyleCountConf) end
-		if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
-		ImGui.SetWindowFontScale(1)
-		ImGui.End()
-		return open
 	end
-
-	if ImGui.CollapsingHeader('Theme Settings##AlertMaster') then
-		ImGui.Text("Cur Theme: %s", useThemeName)
-		-- Combo Box Load Theme
-		if ImGui.BeginCombo("Load Theme", useThemeName) then
-			ImGui.SetWindowFontScale(ZoomLvl)
-			for k, data in pairs(theme.Theme) do
-				local isSelected = data.Name == useThemeName
-				if ImGui.Selectable(data.Name, isSelected) then
-					theme.LoadTheme = data.Name
-					useThemeName = theme.LoadTheme
-					settings[CharConfig]['theme'] = useThemeName
-					save_settings()
-				end
-			end
-			ImGui.EndCombo()
-		end
-
-		-- Slider for adjusting zoom level
-		local tmpZoom = ZoomLvl
-		if ZoomLvl then
-			tmpZoom = ImGui.SliderFloat("Text Scaling", tmpZoom, 0.5, 2.0)
-		end
-		if ZoomLvl ~= tmpZoom then
-			ZoomLvl = tmpZoom
-			settings[CharConfig]['ZoomLvl'] = ZoomLvl
-		end
-
-		if ImGui.Button('Reload Theme File') then
-			load_settings()
-		end
-	end
-
-	if ImGui.CollapsingHeader('Toggles##AlertMaster') then
-		local keys = {}
-		if ImGui.BeginTable('##ToggleTable', 2, ImGuiTableFlags.Resizable) then
-			ImGui.TableSetupColumn('##ToggleCol1', ImGuiTableColumnFlags.None)
-			ImGui.TableSetupColumn('##ToggleCol2', ImGuiTableColumnFlags.None)
-			ImGui.TableNextRow()
-			for k, v in pairs(settings[CharConfig]) do
-				if type(v) == 'boolean' then
-					keys[k]                          = false
-					settings[CharConfig][k], keys[k] = ImGui.Checkbox(k, v)
-					if keys[k] then
+	if drawConfigGUI then
+		if ImGui.CollapsingHeader('Theme Settings##AlertMaster') then
+			ImGui.Text("Cur Theme: %s", useThemeName)
+			-- Combo Box Load Theme
+			if ImGui.BeginCombo("Load Theme", useThemeName) then
+				ImGui.SetWindowFontScale(ZoomLvl)
+				for k, data in pairs(theme.Theme) do
+					local isSelected = data.Name == useThemeName
+					if ImGui.Selectable(data.Name, isSelected) then
+						theme.LoadTheme = data.Name
+						useThemeName = theme.LoadTheme
+						settings[CharConfig]['theme'] = useThemeName
 						save_settings()
 					end
-					ImGui.TableNextColumn()
 				end
+				ImGui.EndCombo()
 			end
-			ImGui.EndTable()
-		end
-	end
 
-	if ImGui.CollapsingHeader('Sounds##AlertMaster') then
-		--- GM Alerts ---
-		ImGui.SeparatorText("GM Alerts##AlertMaster")
-		--- tmp vars to change ---
-		local tmpSndGM = soundGM or 'GM.wav'
-		local tmpVolGM = volGM or 100
-		local tmpDoGM = doSoundGM
+			-- Slider for adjusting zoom level
+			local tmpZoom = ZoomLvl
+			if ZoomLvl then
+				tmpZoom = ImGui.SliderFloat("Text Scaling", tmpZoom, 0.5, 2.0)
+			end
+			if ZoomLvl ~= tmpZoom then
+				ZoomLvl = tmpZoom
+				settings[CharConfig]['ZoomLvl'] = ZoomLvl
+			end
 
-		tmpDoGM = ImGui.Checkbox('GM Alert##AlertMaster', tmpDoGM)
-		if tmpDoGM ~= doSoundGM then
-			doSoundGM = tmpDoGM
-			settings[CharConfig]['doSoundGM'] = doSoundGM
-			save_settings()
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(70)
-		tmpSndGM = ImGui.InputText('Filename##GMSND', tmpSndGM)
-		if tmpSndGM ~= soundGM then
-			soundGM = tmpSndGM
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(100)
-		tmpVolGM = ImGui.InputFloat('Volume##GMVOL', tmpVolGM, 0.1)
-		if tmpVolGM ~= volGM then
-			volGM = tmpVolGM
-		end
-		ImGui.SameLine()
-		if ImGui.Button("Test and Save##GMALERT") then
-			setVolume(volGM)
-			playSound(soundGM)
-			settings[CharConfig]['volGM'] = volGM
-			settings[CharConfig]['soundGM'] = soundGM
-			save_settings()
-		end
-		--- PC Alerts ---
-		ImGui.SeparatorText("PC Alerts##AlertMaster")
-		--- tmp vars to change ---
-		local tmpSndPC = soundPC or 'PC.wav'
-		local tmpVolPC = volPC or 100
-		local tmpDoPC = doSoundPC
-
-		tmpDoPC = ImGui.Checkbox('PC Alert##AlertMaster', tmpDoPC)
-		if tmpDoPC ~= doSoundPC then
-			doSoundPC = tmpDoPC
-			settings[CharConfig]['doSoundPC'] = doSoundPC
-			save_settings()
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(70)
-		tmpSndPC = ImGui.InputText('Filename##PCSND', tmpSndPC)
-		if tmpSndPC ~= soundPC then
-			soundPC = tmpSndPC
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(100)
-		tmpVolPC = ImGui.InputFloat('Volume##PCVOL', tmpVolPC, 0.1)
-		if tmpVolPC ~= volPC then
-			volPC = tmpVolPC
-		end
-		ImGui.SameLine()
-		if ImGui.Button("Test and Save##PCALERT") then
-			setVolume(volPC)
-			playSound(soundPC)
-			settings[CharConfig]['volPC'] = volPC
-			settings[CharConfig]['soundPC'] = soundPC
-			save_settings()
-		end
-		--- PC Announce ---
-		ImGui.SeparatorText("PC Announce##AlertMaster")
-		--- tmp vars to change ---
-		local tmpSndPCEntered = soundPCEntered or 'PC.wav'
-		local tmpVolPCEntered = volPCEntered or 100
-		local tmpDoPCEntered = doSoundPCEntered
-		local tmpSndPCLeft = soundPCLeft or 'PC.wav'
-		local tmpVolPCLeft = volPCLeft or 100
-		local tmpDoPCLeft = doSoundPCLeft
-
-		tmpDoPCEntered = ImGui.Checkbox('PC Entered##AlertMaster', tmpDoPCEntered)
-		if doSoundPCEntered ~= tmpDoPCEntered then
-			doSoundPCEntered = tmpDoPCEntered
-			settings[CharConfig]['doSoundPCEntered'] = doSoundPCEntered
-			save_settings()
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(70)
-		tmpSndPCEntered = ImGui.InputText('Filename##PCENTEREDSND', tmpSndPCEntered)
-		if tmpSndPCEntered ~= soundPCEntered then
-			soundPCEntered = tmpSndPCEntered
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(100)
-		tmpVolPCEntered = ImGui.InputFloat('Volume##PCENTEREDVOL', tmpVolPCEntered, 0.1)
-		if tmpVolPCEntered ~= volPCEntered then
-			volPCEntered = tmpVolPCEntered
-		end
-		ImGui.SameLine()
-		if ImGui.Button("Test and Save##PCENTEREDALERT") then
-			setVolume(volPCEntered)
-			playSound(soundPCEntered)
-			settings[CharConfig]['volPCEntered'] = volPCEntered
-			settings[CharConfig]['soundPCEntered'] = soundPCEntered
-			save_settings()
-		end
-		tmpDoPCLeft = ImGui.Checkbox('PC Left##AlertMaster', tmpDoPCLeft)
-		if doSoundPCLeft ~= tmpDoPCLeft then
-			doSoundPCLeft = tmpDoPCLeft
-			settings[CharConfig]['doSoundPCLeft'] = doSoundPCLeft
-			save_settings()
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(70)
-		tmpSndPCLeft = ImGui.InputText('Filename##PCLEFTSND', tmpSndPCLeft)
-		if tmpSndPCLeft ~= soundPCLeft then
-			soundPCLeft = tmpSndPCLeft
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(100)
-		tmpVolPCLeft = ImGui.InputFloat('Volume##PCLEFTVOL', tmpVolPCLeft, 0.1)
-		if tmpVolPCLeft ~= volPCLeft then
-			volPCLeft = tmpVolPCLeft
-		end
-		ImGui.SameLine()
-		if ImGui.Button("Test and Save##PCLEFTALERT") then
-			setVolume(volPCLeft)
-			playSound(soundPCLeft)
-			settings[CharConfig]['volPCLeft'] = volPCLeft
-			settings[CharConfig]['soundPCLeft'] = soundPCLeft
-			save_settings()
+			if ImGui.Button('Reload Theme File') then
+				load_settings()
+			end
 		end
 
-
-		--- NPC Alerts ---
-		ImGui.SeparatorText("NPC Alerts##AlertMaster")
-		--- tmp vars to change ---
-		local tmpSndNPC = soundNPC or 'NPC.wav'
-		local tmpVolNPC = volNPC or 100
-		local tmpDoNPC = doSoundNPC
-
-		tmpDoNPC = ImGui.Checkbox('NPC Alert##AlertMaster', tmpDoNPC)
-		if doSoundNPC ~= tmpDoNPC then
-			doSoundNPC = tmpDoNPC
-			settings[CharConfig]['doSoundNPC'] = doSoundNPC
-			save_settings()
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(70)
-		tmpSndNPC = ImGui.InputText('Filename##NPCSND', tmpSndNPC)
-		if tmpSndNPC ~= soundNPC then
-			soundNPC = tmpSndNPC
-		end
-		ImGui.SameLine()
-		ImGui.SetNextItemWidth(100)
-		tmpVolNPC = ImGui.InputFloat('Volume##NPCVOL', tmpVolNPC, 0.1)
-		if tmpVolNPC ~= volNPC then
-			volNPC = tmpVolNPC
-		end
-		ImGui.SameLine()
-		if ImGui.Button("Test and Save##NPCALERT") then
-			setVolume(volNPC)
-			playSound(soundNPC)
-			settings[CharConfig]['volNPC'] = volNPC
-			settings[CharConfig]['soundNPC'] = soundNPC
-			save_settings()
-		end
-	end
-
-	if ImGui.CollapsingHeader("Commands") then
-		if ImGui.BeginTable("CommandTable", 2, ImGuiTableFlags.Resizable) then
-			ImGui.TableSetupColumn("Command", ImGuiTableColumnFlags.None)
-			ImGui.TableSetupColumn("Text", ImGuiTableColumnFlags.None)
-			for key, command in pairs(settings[CharCommands]) do
-				local tmpCmd = command
+		if ImGui.CollapsingHeader('Toggles##AlertMaster') then
+			local keys = {}
+			if ImGui.BeginTable('##ToggleTable', 2, ImGuiTableFlags.Resizable) then
+				ImGui.TableSetupColumn('##ToggleCol1', ImGuiTableColumnFlags.None)
+				ImGui.TableSetupColumn('##ToggleCol2', ImGuiTableColumnFlags.None)
 				ImGui.TableNextRow()
-				ImGui.TableNextColumn()
-				ImGui.Text(key)
-				ImGui.TableNextColumn()
-				tmpCmd = ImGui.InputText("##" .. key, tmpCmd)
-				if tmpCmd ~= command then
-					if tmpCmd == '' or tmpCmd == nil then
-						settings[CharCommands][key] = nil
-					else
-						settings[CharCommands][key] = tmpCmd
+				for k, v in pairs(settings[CharConfig]) do
+					if type(v) == 'boolean' then
+						keys[k]                          = false
+						settings[CharConfig][k], keys[k] = ImGui.Checkbox(k, v)
+						if keys[k] then
+							save_settings()
+						end
+						ImGui.TableNextColumn()
 					end
-					save_settings()
 				end
+				ImGui.EndTable()
 			end
-			ImGui.EndTable()
+		end
+
+		if ImGui.CollapsingHeader('Sounds##AlertMaster') then
+			--- GM Alerts ---
+			ImGui.SeparatorText("GM Alerts##AlertMaster")
+			--- tmp vars to change ---
+			local tmpSndGM = soundGM or 'GM.wav'
+			local tmpVolGM = volGM or 100
+			local tmpDoGM = doSoundGM
+
+			tmpDoGM = ImGui.Checkbox('GM Alert##AlertMaster', tmpDoGM)
+			if tmpDoGM ~= doSoundGM then
+				doSoundGM = tmpDoGM
+				settings[CharConfig]['doSoundGM'] = doSoundGM
+				save_settings()
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(70)
+			tmpSndGM = ImGui.InputText('Filename##GMSND', tmpSndGM)
+			if tmpSndGM ~= soundGM then
+				soundGM = tmpSndGM
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(100)
+			tmpVolGM = ImGui.InputFloat('Volume##GMVOL', tmpVolGM, 0.1)
+			if tmpVolGM ~= volGM then
+				volGM = tmpVolGM
+			end
+			ImGui.SameLine()
+			if ImGui.Button("Test and Save##GMALERT") then
+				setVolume(volGM)
+				playSound(soundGM)
+				settings[CharConfig]['volGM'] = volGM
+				settings[CharConfig]['soundGM'] = soundGM
+				save_settings()
+			end
+			--- PC Alerts ---
+			ImGui.SeparatorText("PC Alerts##AlertMaster")
+			--- tmp vars to change ---
+			local tmpSndPC = soundPC or 'PC.wav'
+			local tmpVolPC = volPC or 100
+			local tmpDoPC = doSoundPC
+
+			tmpDoPC = ImGui.Checkbox('PC Alert##AlertMaster', tmpDoPC)
+			if tmpDoPC ~= doSoundPC then
+				doSoundPC = tmpDoPC
+				settings[CharConfig]['doSoundPC'] = doSoundPC
+				save_settings()
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(70)
+			tmpSndPC = ImGui.InputText('Filename##PCSND', tmpSndPC)
+			if tmpSndPC ~= soundPC then
+				soundPC = tmpSndPC
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(100)
+			tmpVolPC = ImGui.InputFloat('Volume##PCVOL', tmpVolPC, 0.1)
+			if tmpVolPC ~= volPC then
+				volPC = tmpVolPC
+			end
+			ImGui.SameLine()
+			if ImGui.Button("Test and Save##PCALERT") then
+				setVolume(volPC)
+				playSound(soundPC)
+				settings[CharConfig]['volPC'] = volPC
+				settings[CharConfig]['soundPC'] = soundPC
+				save_settings()
+			end
+			--- PC Announce ---
+			ImGui.SeparatorText("PC Announce##AlertMaster")
+			--- tmp vars to change ---
+			local tmpSndPCEntered = soundPCEntered or 'PC.wav'
+			local tmpVolPCEntered = volPCEntered or 100
+			local tmpDoPCEntered = doSoundPCEntered
+			local tmpSndPCLeft = soundPCLeft or 'PC.wav'
+			local tmpVolPCLeft = volPCLeft or 100
+			local tmpDoPCLeft = doSoundPCLeft
+
+			tmpDoPCEntered = ImGui.Checkbox('PC Entered##AlertMaster', tmpDoPCEntered)
+			if doSoundPCEntered ~= tmpDoPCEntered then
+				doSoundPCEntered = tmpDoPCEntered
+				settings[CharConfig]['doSoundPCEntered'] = doSoundPCEntered
+				save_settings()
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(70)
+			tmpSndPCEntered = ImGui.InputText('Filename##PCENTEREDSND', tmpSndPCEntered)
+			if tmpSndPCEntered ~= soundPCEntered then
+				soundPCEntered = tmpSndPCEntered
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(100)
+			tmpVolPCEntered = ImGui.InputFloat('Volume##PCENTEREDVOL', tmpVolPCEntered, 0.1)
+			if tmpVolPCEntered ~= volPCEntered then
+				volPCEntered = tmpVolPCEntered
+			end
+			ImGui.SameLine()
+			if ImGui.Button("Test and Save##PCENTEREDALERT") then
+				setVolume(volPCEntered)
+				playSound(soundPCEntered)
+				settings[CharConfig]['volPCEntered'] = volPCEntered
+				settings[CharConfig]['soundPCEntered'] = soundPCEntered
+				save_settings()
+			end
+			tmpDoPCLeft = ImGui.Checkbox('PC Left##AlertMaster', tmpDoPCLeft)
+			if doSoundPCLeft ~= tmpDoPCLeft then
+				doSoundPCLeft = tmpDoPCLeft
+				settings[CharConfig]['doSoundPCLeft'] = doSoundPCLeft
+				save_settings()
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(70)
+			tmpSndPCLeft = ImGui.InputText('Filename##PCLEFTSND', tmpSndPCLeft)
+			if tmpSndPCLeft ~= soundPCLeft then
+				soundPCLeft = tmpSndPCLeft
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(100)
+			tmpVolPCLeft = ImGui.InputFloat('Volume##PCLEFTVOL', tmpVolPCLeft, 0.1)
+			if tmpVolPCLeft ~= volPCLeft then
+				volPCLeft = tmpVolPCLeft
+			end
+			ImGui.SameLine()
+			if ImGui.Button("Test and Save##PCLEFTALERT") then
+				setVolume(volPCLeft)
+				playSound(soundPCLeft)
+				settings[CharConfig]['volPCLeft'] = volPCLeft
+				settings[CharConfig]['soundPCLeft'] = soundPCLeft
+				save_settings()
+			end
+
+
+			--- NPC Alerts ---
+			ImGui.SeparatorText("NPC Alerts##AlertMaster")
+			--- tmp vars to change ---
+			local tmpSndNPC = soundNPC or 'NPC.wav'
+			local tmpVolNPC = volNPC or 100
+			local tmpDoNPC = doSoundNPC
+
+			tmpDoNPC = ImGui.Checkbox('NPC Alert##AlertMaster', tmpDoNPC)
+			if doSoundNPC ~= tmpDoNPC then
+				doSoundNPC = tmpDoNPC
+				settings[CharConfig]['doSoundNPC'] = doSoundNPC
+				save_settings()
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(70)
+			tmpSndNPC = ImGui.InputText('Filename##NPCSND', tmpSndNPC)
+			if tmpSndNPC ~= soundNPC then
+				soundNPC = tmpSndNPC
+			end
+			ImGui.SameLine()
+			ImGui.SetNextItemWidth(100)
+			tmpVolNPC = ImGui.InputFloat('Volume##NPCVOL', tmpVolNPC, 0.1)
+			if tmpVolNPC ~= volNPC then
+				volNPC = tmpVolNPC
+			end
+			ImGui.SameLine()
+			if ImGui.Button("Test and Save##NPCALERT") then
+				setVolume(volNPC)
+				playSound(soundNPC)
+				settings[CharConfig]['volNPC'] = volNPC
+				settings[CharConfig]['soundNPC'] = soundNPC
+				save_settings()
+			end
+		end
+
+		if ImGui.CollapsingHeader("Commands") then
+			if ImGui.BeginTable("CommandTable", 2, ImGuiTableFlags.Resizable) then
+				ImGui.TableSetupColumn("Command", ImGuiTableColumnFlags.None)
+				ImGui.TableSetupColumn("Text", ImGuiTableColumnFlags.None)
+				for key, command in pairs(settings[CharCommands]) do
+					local tmpCmd = command
+					ImGui.TableNextRow()
+					ImGui.TableNextColumn()
+					ImGui.Text(key)
+					ImGui.TableNextColumn()
+					tmpCmd = ImGui.InputText("##" .. key, tmpCmd)
+					if tmpCmd ~= command then
+						if tmpCmd == '' or tmpCmd == nil then
+							settings[CharCommands][key] = nil
+						else
+							settings[CharCommands][key] = tmpCmd
+						end
+						save_settings()
+					end
+				end
+				ImGui.EndTable()
+			end
+		end
+
+		if ImGui.Button('Close') then
+			openConfigGUI = false
+			settings[CharConfig]['theme'] = useThemeName
+			settings[CharConfig]['ZoomLvl'] = ZoomLvl
+			save_settings()
 		end
 	end
-
-	if ImGui.Button('Close') then
-		openConfigGUI = false
-		settings[CharConfig]['theme'] = useThemeName
-		settings[CharConfig]['ZoomLvl'] = ZoomLvl
-		save_settings()
-	end
-
 	if StyleCountConf > 0 then ImGui.PopStyleVar(StyleCountConf) end
 	if ColorCountConf > 0 then ImGui.PopStyleColor(ColorCountConf) end
 	ImGui.SetWindowFontScale(1)
@@ -1846,23 +1819,23 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 	if zone_id == Zone.ID() then
 		-- Start a new table for alerts
 		local sizeX = ImGui.GetContentRegionAvail() - 4
-		if ImGui.BeginTable("AlertTable", 3, GUI_Alert.Table.Flags) then
+		if ImGui.BeginTable("AlertTable", 3, Module.GUI_Alert.Table.Flags) then
 			ImGui.TableSetupScrollFreeze(0, 1)
-			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.DefaultSort), 90, GUI_Alert.Table.Column_ID.MobName)
-			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.DefaultSort), 50, GUI_Alert.Table.Column_ID.MobDist)
+			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.DefaultSort), 90, Module.GUI_Alert.Table.Column_ID.MobName)
+			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.DefaultSort), 50, Module.GUI_Alert.Table.Column_ID.MobDist)
 			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 30,
-				GUI_Alert.Table.Column_ID.MobDirection)
+				Module.GUI_Alert.Table.Column_ID.MobDirection)
 			ImGui.TableHeadersRow()
 			local sortSpecsAlerts = ImGui.TableGetSortSpecs()
 
-			if sortSpecsAlerts and (sortSpecsAlerts.SpecsDirty or GUI_Alert.Refresh.Sort.Rules) then
+			if sortSpecsAlerts and (sortSpecsAlerts.SpecsDirty or Module.GUI_Alert.Refresh.Sort.Rules) then
 				if #Table_Cache.Alerts > 0 then
-					GUI_Alert.Table.SortSpecs = sortSpecsAlerts
+					Module.GUI_Alert.Table.SortSpecs = sortSpecsAlerts
 					table.sort(Table_Cache.Alerts, AlertTableSortSpecs)
-					GUI_Alert.Table.SortSpecs = nil
+					Module.GUI_Alert.Table.SortSpecs = nil
 				end
 				sortSpecsAlerts.SpecsDirty = false
-				GUI_Alert.Refresh.Sort.Rules = false
+				Module.GUI_Alert.Refresh.Sort.Rules = false
 			end
 			local clipper = ImGuiListClipper.new()
 			clipper:Begin(#Table_Cache.Alerts)
@@ -1890,7 +1863,7 @@ function DrawAlertGUI() -- Draw GUI Window
 		if currZone ~= lastZone then return end
 		-- ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5)
 		ColorCountAlert, StyleCountAlert = DrawTheme(useThemeName)
-		AlertWindowOpen, opened = ImGui.Begin("Alert Window##" .. myName, AlertWindowOpen, GUI_Alert.Flags)
+		AlertWindowOpen, opened = ImGui.Begin("Alert Window##" .. MyUI_CharLoaded, AlertWindowOpen, Module.GUI_Alert.Flags)
 		if not opened then
 			AlertWindowOpen = false
 			AlertWindow_Show = false
@@ -1914,9 +1887,10 @@ function DrawAlertGUI() -- Draw GUI Window
 	end
 end
 
-local function DrawSearchGUI()
-	--RefreshZone() -- shouldn't need this since we are refreshing every delay anyway.
+function Module.RenderGUI()
 	DrawSearchWindow()
+	DrawAlertGUI()
+	Config_GUI()
 end
 
 local load_binds = function()
@@ -1927,22 +1901,27 @@ local load_binds = function()
 		-- enable/disable
 		if cmd == 'on' then
 			active = true
-			print_ts('\ayAlert Master enabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert Master enabled.')
 		elseif cmd == 'off' then
 			active = false
 			tGMs, tAnnounce, tPlayers, tSpawns = {}, {}, {}, {}
-			print_ts('\ayAlert Master disabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert Master disabled.')
+		end
+
+		if cmd == 'quit' or cmd == 'exit' then
+			Module.IsRunning = false
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert Master\ao Shutting Down.')
 		end
 		-- Alert Show / Hide
 		if cmd == 'popup' then
 			if AlertWindowOpen then
 				AlertWindowOpen = false
 				AlertWindow_Show = false
-				print_ts('\ayClosing Alert Window.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayClosing Alert Window.')
 			else
 				AlertWindowOpen = true
 				AlertWindow_Show = true
-				print_ts('\ayShowing Alert Window.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayShowing Alert Window.')
 			end
 		end
 		-- Search Gui Show / Hide
@@ -1950,12 +1929,12 @@ local load_binds = function()
 			if SearchWindowOpen then
 				SearchWindow_Show = false
 				SearchWindowOpen = false
-				print_ts('\ayClosing Search UI.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayClosing Search UI.')
 			else
 				RefreshZone()
 				SearchWindow_Show = true
 				SearchWindowOpen = true
-				print_ts('\ayShowing Search UI.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayShowing Search UI.')
 			end
 		end
 		-- Alert Popup On/Off Toggle
@@ -1964,12 +1943,12 @@ local load_binds = function()
 				doAlert = false
 				settings[CharConfig]['popup'] = doAlert
 				save_settings()
-				print_ts('\ayAlert PopUp Disabled.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert PopUp Disabled.')
 			else
 				doAlert = true
 				settings[CharConfig]['popup'] = doAlert
 				save_settings()
-				print_ts('\ayAlert PopUp Enabled.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert PopUp Enabled.')
 			end
 		end
 		-- Aggro Display On/Off Toggle
@@ -1978,12 +1957,12 @@ local load_binds = function()
 				showAggro = false
 				settings[CharConfig]['aggro'] = showAggro
 				save_settings()
-				print_ts('\ayShow Aggro Disabled.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayShow Aggro Disabled.')
 			else
 				showAggro = true
 				settings[CharConfig]['aggro'] = showAggro
 				save_settings()
-				print_ts('\ayShow Aggro Enabled.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayShow Aggro Enabled.')
 			end
 		end
 		-- Beep On/Off Toggle
@@ -1992,12 +1971,12 @@ local load_binds = function()
 				doBeep = false
 				settings[CharConfig]['beep'] = doBeep
 				save_settings()
-				print_ts('\ayBeep Alerts Disabled.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayBeep Alerts Disabled.')
 			else
 				doBeep = true
 				settings[CharConfig]['beep'] = doBeep
 				save_settings()
-				print_ts('\ayBeep Alerts Enabled.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayBeep Alerts Enabled.')
 			end
 		end
 		-- radius
@@ -2005,21 +1984,21 @@ local load_binds = function()
 			settings[CharConfig]['radius'] = val_num
 			radius = val_num
 			save_settings()
-			print_ts('\ayUpdated radius = ' .. radius)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayUpdated radius = ' .. radius)
 		end
 		-- zradius
 		if cmd == 'zradius' and val_num > 0 then
 			settings[CharConfig]['zradius'] = val_num
 			zradius = val_num
 			save_settings()
-			print_ts('\ayUpdated zradius = ' .. zradius)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayUpdated zradius = ' .. zradius)
 		end
 		-- delay
 		if cmd == 'delay' and val_num > 0 then
 			settings[CharConfig]['delay'] = val_num
 			delay = val_num
 			save_settings()
-			print_ts('\ayDelay interval = ' .. delay)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayDelay interval = ' .. delay)
 		end
 		---- Volumes ----
 		if cmd == 'volnpc' and val_num > 0 then
@@ -2028,7 +2007,7 @@ local load_binds = function()
 			save_settings()
 			setVolume(volNPC)
 			playSound(soundNPC)
-			print_ts('\ayNPC Volume = ' .. volNPC)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayNPC Volume = ' .. volNPC)
 		end
 		if cmd == 'volpc' and val_num > 0 then
 			settings[CharConfig]['volPC'] = val_num
@@ -2036,7 +2015,7 @@ local load_binds = function()
 			save_settings()
 			setVolume(volPC)
 			playSound(soundPC)
-			print_ts('\ayPC Volume = ' .. volPC)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayPC Volume = ' .. volPC)
 		end
 		if cmd == 'volgm' and val_num > 0 then
 			settings[CharConfig]['volGM'] = val_num
@@ -2044,22 +2023,22 @@ local load_binds = function()
 			save_settings()
 			setVolume(volGM)
 			playSound(soundGM)
-			print_ts('\ayGM Volume = ' .. volGM)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayGM Volume = ' .. volGM)
 		end
 		----- Sounds -----
 		if cmd == 'dosound' and val_str ~= nil then
 			if val_str == 'npc' then
 				doSoundNPC = not doSoundNPC
 				settings[CharConfig]['doSoundNPC'] = doSoundNPC
-				print_ts('\aySetting doSoundNPC = ' .. tostring(doSoundNPC))
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\aySetting doSoundNPC = ' .. tostring(doSoundNPC))
 			elseif val_str == 'pc' then
 				doSoundPC = not doSoundPC
 				settings[CharConfig]['doSoundPC'] = doSoundPC
-				print_ts('\aySetting doSoundPC = ' .. tostring(doSoundPC))
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\aySetting doSoundPC = ' .. tostring(doSoundPC))
 			elseif val_str == 'gm' then
 				doSoundGM = not doSoundGM
 				settings[CharConfig]['doSoundGM'] = doSoundGM
-				print_ts('\aySetting doSoundGM = ' .. tostring(doSoundGM))
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\aySetting doSoundGM = ' .. tostring(doSoundGM))
 			end
 			save_settings()
 		end
@@ -2068,62 +2047,62 @@ local load_binds = function()
 			settings[CharConfig]['distfar'] = val_num
 			DistColorRanges.red = val_num
 			save_settings()
-			print_ts('\arFar Range\a-t Greater than:\a-r' .. DistColorRanges.red .. '\ax')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\arFar Range\a-t Greater than:\a-r' .. DistColorRanges.red .. '\ax')
 		end
 		-- distmid Color Distance
 		if cmd == 'distmid' and val_num > 0 then
 			settings[CharConfig]['distmid'] = val_num
 			DistColorRanges.orange = val_num
 			save_settings()
-			print_ts('\aoMid Range\a-t Between: \a-g' .. DistColorRanges.orange .. ' \a-tand \a-r' .. DistColorRanges.red .. '\ax')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\aoMid Range\a-t Between: \a-g' .. DistColorRanges.orange .. ' \a-tand \a-r' .. DistColorRanges.red .. '\ax')
 		end
 		-- remind
 		if cmd == 'remind' and val_num >= 0 then
 			settings[CharConfig]['remind'] = val_num
 			remind = val_num
 			save_settings()
-			print_ts('\ayRemind interval = ' .. remind)
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayRemind interval = ' .. remind)
 		end
 		if cmd == 'reload' then
 			load_settings()
-			print_ts("\ayReloading Settings from File!")
+			MyUI_Utils.PrintOutput('AlertMaster', nil, "\ayReloading Settings from File!")
 		end
 		if cmd == 'remindnpc' and val_num >= 0 then
 			settings[CharConfig]['remindNPC'] = val_num
 			remindNPC = val_num
 			save_settings()
-			print_ts('\ayRemind NPC interval = ' .. remindNPC .. 'minutes')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayRemind NPC interval = ' .. remindNPC .. 'minutes')
 		end
 		-- enabling/disabling spawn alerts
 		if cmd == 'spawns' and val_str == 'on' then
 			settings[CharConfig]['spawns'] = true
 			save_settings()
 			spawns = true
-			print_ts('\aySpawn alerting enabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\aySpawn alerting enabled.')
 		elseif cmd == 'spawns' and val_str == 'off' then
 			settings[CharConfig]['spawns'] = false
 			save_settings()
 			spawns = false
-			print_ts('\aySpawn alerting disabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\aySpawn alerting disabled.')
 		end
 		-- enabling/disabling pcs alerts
 		if cmd == 'pcs' and val_str == 'on' then
 			settings[CharConfig]['pcs'] = true
 			save_settings()
 			pcs = true
-			print_ts('\ayPC alerting enabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayPC alerting enabled.')
 		elseif cmd == 'pcs' and val_str == 'off' then
 			settings[CharConfig]['pcs'] = false
 			save_settings()
 			pcs = false
-			print_ts('\ayPC alerting disabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayPC alerting disabled.')
 		end
 		-- enabling/disabling pcs alerts
 		if cmd == 'reload' then
 			load_settings()
-			print_ts("\ayReloading Settings from File!")
+			MyUI_Utils.PrintOutput('AlertMaster', nil, "\ayReloading Settings from File!")
 		end
-		local sCount = 0
+		local sCount = #tSpawns or 0
 		-- adding/removing/listing spawn alerts for current zone
 		if cmd == 'spawnadd' then
 			if val_str ~= nil and val_str ~= 'nil' then
@@ -2131,7 +2110,7 @@ local load_binds = function()
 			elseif mq.TLO.Target() ~= nil and mq.TLO.Target.Type() == 'NPC' then
 				val_str = mq.TLO.Target.DisplayName()
 			else
-				print("\arNO \aoSpawn supplied\aw or \agTarget")
+				MyUI_Utils.PrintOutput('AlertMaster', true, "\arNO \aoSpawn supplied\aw or \agTarget")
 				return
 			end
 			addSpawnToList(val_str)
@@ -2141,7 +2120,7 @@ local load_binds = function()
 			-- -- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
 			-- for k, v in pairs(settings[zone]) do
 			-- 	if settings[zone][k] == val_str then
-			-- 		print_ts("\aySpawn alert \""..val_str.."\" already exists.")
+			-- 		MyUI_Utils.PrintOutput('AlertMaster',nil,"\aySpawn alert \""..val_str.."\" already exists.")
 			-- 		return
 			-- 	end
 			-- 	sCount = sCount + 1
@@ -2149,7 +2128,7 @@ local load_binds = function()
 			-- -- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
 			-- settings[zone]['Spawn'..sCount+1] = val_str
 			-- save_settings()
-			-- print_ts('\ayAdded spawn alert for '..val_str..' in '..zone)
+			-- MyUI_Utils.PrintOutput('AlertMaster',nil,'\ayAdded spawn alert for '..val_str..' in '..zone)
 		elseif cmd == 'spawndel' and val_str:len() > 0 then
 			-- Identify and remove the spawn from the ini
 			local found = false
@@ -2175,34 +2154,36 @@ local load_binds = function()
 					settings[zone]['Spawn' .. i] = v
 				end
 				save_settings()
-				print_ts('\ayRemoved spawn alert for ' .. val_str .. ' in ' .. zone)
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayRemoved spawn alert for ' .. val_str .. ' in ' .. zone)
 			else
-				print_ts('\aySpawn alert for ' .. val_str .. ' not found in ' .. zone)
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\aySpawn alert for ' .. val_str .. ' not found in ' .. zone)
 			end
 		elseif cmd == 'spawnlist' then
-			if sCount > 0 then
-				print_ts('\aySpawn Alerts (\a-t' .. zone .. '\ax): ')
-				local tmp = {}
-				for k, v in pairs(settings[zone]) do table.insert(tmp, v) end
-				for k, v in ipairs(tmp) do
-					local up = false
-					local name
-					for _, spawn in pairs(tSpawns) do
-						if string.find(spawn.DisplayName(), v) ~= nil then
+			-- if sCount > 0 then
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\aySpawn Alerts (\a-t' .. zone .. '\ax): ')
+			local tmp = {}
+			for k, v in pairs(settings[zone]) do table.insert(tmp, v) end
+			for k, v in ipairs(tmp) do
+				local up = false
+				local name = ''
+				for _, spawn in pairs(tSpawns) do
+					if spawn ~= nil then
+						if string.find(v, v) ~= nil then
 							up = true
-							name = spawn.DisplayName()
+							name = v
 							break
 						end
 					end
-					if up then
-						print_ts(string.format('\ag[Live] %s ("%s")\ax', name, v))
-					else
-						print_ts(string.format('\a-t[Dead] %s\ax', v))
-					end
 				end
-			else
-				print_ts('\aySpawn Alerts (\a-t' .. zone .. '\ax): No alerts found')
+				if up then
+					MyUI_Utils.PrintOutput('AlertMaster', nil, string.format('\ag[Live] %s ("%s")\ax', name, v))
+				else
+					MyUI_Utils.PrintOutput('AlertMaster', nil, string.format('\a-t[Dead] %s\ax', v))
+				end
 			end
+			-- else
+			-- 	MyUI_Utils.PrintOutput('AlertMaster',nil,'\aySpawn Alerts (\a-t' .. zone .. '\ax): No alerts found')
+			-- end
 		end
 
 		-- adding/removing/listing commands
@@ -2216,7 +2197,7 @@ local load_binds = function()
 			-- if the section does exist in the ini, spin over entries and make sure we aren't duplicating
 			for k, v in pairs(settings[CharCommands]) do
 				if settings[CharCommands][k] == val_str then
-					print_ts("\ayCommand \"" .. val_str .. "\" already exists.")
+					MyUI_Utils.PrintOutput('AlertMaster', nil, "\ayCommand \"" .. val_str .. "\" already exists.")
 					return
 				end
 				cmdCount = cmdCount + 1
@@ -2224,7 +2205,7 @@ local load_binds = function()
 			-- if we made it this far, the command is new -- add it to the table and store to ini
 			settings[CharCommands]['Cmd' .. cmdCount + 1] = val_str
 			save_settings()
-			print_ts('\ayAdded Command \"' .. val_str .. '\"')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAdded Command \"' .. val_str .. '\"')
 		elseif cmd == 'cmddel' and val_str:len() > 0 then
 			-- remove from the ini
 			for k, v in pairs(settings[CharCommands]) do
@@ -2238,15 +2219,15 @@ local load_binds = function()
 				end
 			end
 			save_settings()
-			print_ts('\ayRemoved Command \"' .. val_str .. '\"')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayRemoved Command \"' .. val_str .. '\"')
 		elseif cmd == 'cmdlist' then
 			if cmdCount > 0 then
-				print_ts('\ayCommands (\a-t' .. myName .. '\ax): ')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayCommands (\a-t' .. MyUI_CharLoaded .. '\ax): ')
 				for k, v in pairs(settings[CharCommands]) do
-					print_ts('\t\a-t' .. k .. ' - ' .. v)
+					MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\a-t' .. k .. ' - ' .. v)
 				end
 			else
-				print_ts('\ayCommands (\a-t' .. myName .. '\ax): No commands configured.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayCommands (\a-t' .. MyUI_CharLoaded .. '\ax): No commands configured.')
 			end
 		end
 		-- adding/removing/listing ignored pcs
@@ -2257,7 +2238,7 @@ local load_binds = function()
 			-- if the section does exist in the ini, spin over entries and make sure we aren't duplicating
 			for k, v in pairs(settings['Ignore']) do
 				if settings['Ignore'][k] == val_str then
-					print_ts('\ayAlready ignoring \"' .. val_str .. '\".')
+					MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlready ignoring \"' .. val_str .. '\".')
 					return
 				end
 				ignoreCount = ignoreCount + 1
@@ -2265,22 +2246,22 @@ local load_binds = function()
 			-- if we made it this far, the command is new -- add it to the table and store to ini
 			settings['Ignore']['Ignore' .. ignoreCount + 1] = val_str
 			save_settings()
-			print_ts('\ayNow ignoring \"' .. val_str .. '\"')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayNow ignoring \"' .. val_str .. '\"')
 		elseif cmd == 'ignoredel' and val_str:len() > 0 then
 			-- remove from the ini
 			for k, v in pairs(settings['Ignore']) do
 				if settings['Ignore'][k] == val_str then settings['Ignore'][k] = nil end
 			end
 			save_settings()
-			print_ts('\ayNo longer ignoring \"' .. val_str .. '\"')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayNo longer ignoring \"' .. val_str .. '\"')
 		elseif cmd == 'ignorelist' then
 			if ignoreCount > 0 then
-				print_ts('\ayIgnore List (\a-t' .. myName .. '\ax): ')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayIgnore List (\a-t' .. MyUI_CharLoaded .. '\ax): ')
 				for k, v in pairs(settings['Ignore']) do
-					print_ts('\t\a-t' .. k .. ' - ' .. v)
+					MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\a-t' .. k .. ' - ' .. v)
 				end
 			else
-				print_ts('\ayIgnore List (\a-t' .. myName .. '\ax): No ignore list configured.')
+				MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayIgnore List (\a-t' .. MyUI_CharLoaded .. '\ax): No ignore list configured.')
 			end
 		end
 		-- Announce Alerts
@@ -2288,105 +2269,123 @@ local load_binds = function()
 			announce = true
 			settings[CharConfig]['announce'] = announce
 			save_settings()
-			print_ts('\ayNow announcing players entering/exiting the zone.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayNow announcing players entering/exiting the zone.')
 		elseif cmd == 'announce' and val_str == 'off' then
 			announce = false
 			settings[CharConfig]['announce'] = announce
 			save_settings()
-			print_ts('\ayNo longer announcing players entering/exiting the zone.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayNo longer announcing players entering/exiting the zone.')
 		end
 		-- GM Checks
 		if cmd == 'gm' and val_str == 'on' then
 			gms = true
 			settings[CharConfig]['gms'] = gms
 			save_settings()
-			print_ts('\ayGM Alerts enabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayGM Alerts enabled.')
 		elseif cmd == 'gm' and val_str == 'off' then
 			gms = false
 			settings[CharConfig]['gms'] = gms
 			save_settings()
-			print_ts('\ayGM Alerts disabled.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayGM Alerts disabled.')
 		end
 		-- Status
 		if cmd == 'status' then print_status() end
 		if cmd == nil or cmd == 'help' then
-			print_ts('\ayAlert Master Usage:')
-			print_ts('\a-y- General -')
-			print_ts('\t\ay/am status\a-t -- print current alerting status/settings')
-			print_ts('\t\ay/am help\a-t -- print help/usage')
-			print_ts('\t\ay/am on|off\a-t -- toggle alerts')
-			print_ts('\t\ay/am gm on|off\a-t -- toggle GM alerts')
-			print_ts('\t\ay/am pcs on|off\a-t -- toggle PC alerts')
-			print_ts('\t\ay/am spawns on|off\a-t -- toggle spawn alerts')
-			print_ts('\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
-			print_ts('\t\ay/am doalert \a-t -- toggle Popup alerts')
-			print_ts('\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
-			print_ts('\t\ay/am radius #\a-t -- configure alert radius (integer)')
-			print_ts('\t\ay/am reload #\a-t -- reload the Config File')
-			print_ts('\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
-			print_ts('\t\ay/am delay #\a-t -- configure alert check delay (seconds)')
-			print_ts('\t\ay/am remind #\a-t -- configure Player and GM alert reminder interval (seconds)')
-			print_ts('\t\ay/am remindnpc #\a-t -- configure NPC alert reminder interval (Minutes)')
-			print_ts('\t\ay/am popup\a-t -- Toggles Display of Alert Window')
-			print_ts('\t\ay/am reload\a-t -- Reload the ini file')
-			print_ts('\t\ay/am distmid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
-			print_ts('\t\ay/am distfar\a-t -- Sets the distnace the color changes from \a-oOrange \a-tto \a-rRed')
-			print_ts('\a-y- Sounds -')
-			print_ts('\t\ay/am dosound pc\a-t -- toggle PC custom sound alerts')
-			print_ts('\t\ay/am dosound npc\a-t -- toggle NPC custom sound alerts')
-			print_ts('\t\ay/am dosound gm\a-t -- toggle GM custom sound alerts')
-			print_ts('\t\ay/am volpc 1-100\a-t -- Set PC custom sound Volume 1-100')
-			print_ts('\t\ay/am volnpc 1-100\a-t -- Set NPC custom sound Volume 1-100')
-			print_ts('\t\ay/am volgm 1-100\a-t -- Set GM custom sound Volume 1-100')
-			print_ts('\a-y- Ignore List -')
-			print_ts('\t\ay/am ignoreadd pcname\a-t -- add pc to the ignore list')
-			print_ts('\t\ay/am ignoredel pcname\a-t -- delete pc from the ignore list')
-			print_ts('\t\ay/am ignorelist\a-t -- display ignore list')
-			print_ts('\a-y- Spawns -')
-			print_ts('\t\ay/am spawnadd npc\a-t -- add monster to the list of tracked spawns')
-			print_ts('\t\ay/am spawndel npc\a-t -- delete monster from the list of tracked spawns')
-			print_ts('\t\ay/am spawnlist\a-t -- display monsters being tracked for the current zone')
-			print_ts('\t\ay/am show\a-t -- Toggles display of Search Window and Spawns for the current zone')
-			print_ts('\t\ay/am aggro\a-t -- Toggles display of Aggro status bars in the search window.')
-			print_ts('\a-y- Commands - executed when players remain in the alert radius for the reminder interval')
-			print_ts('\t\ay/am cmdadd command\a-t -- add command to run when someone enters your alert radius')
-			print_ts('\t\ay/am cmddel command\a-t -- delete command to run when someone enters your alert radius')
-			print_ts('\t\ay/am cmdlist\a-t -- display command(s) to run when someone enters your alert radius')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert Master Usage:')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-y- General -')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am status\a-t -- print current alerting status/settings')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am help\a-t -- print help/usage')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am on|off\a-t -- toggle alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am gm on|off\a-t -- toggle GM alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am pcs on|off\a-t -- toggle PC alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am spawns on|off\a-t -- toggle spawn alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am beep on|off\a-t -- toggle Audible Beep alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am doalert \a-t -- toggle Popup alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am announce on|off\a-t -- toggle announcing PCs entering/exiting the zone')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am radius #\a-t -- configure alert radius (integer)')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am reload #\a-t -- reload the Config File')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am zradius #\a-t -- configure alert z-radius (integer)')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am delay #\a-t -- configure alert check delay (seconds)')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am remind #\a-t -- configure Player and GM alert reminder interval (seconds)')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am remindnpc #\a-t -- configure NPC alert reminder interval (Minutes)')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am popup\a-t -- Toggles Display of Alert Window')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am reload\a-t -- Reload the ini file')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am distmid\a-t -- Sets distance the color changes from \a-gGreen \a-tto \a-oOrange')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am distfar\a-t -- Sets the distnace the color changes from \a-oOrange \a-tto \a-rRed')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-y- Sounds -')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am dosound pc\a-t -- toggle PC custom sound alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am dosound npc\a-t -- toggle NPC custom sound alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am dosound gm\a-t -- toggle GM custom sound alerts')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am volpc 1-100\a-t -- Set PC custom sound Volume 1-100')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am volnpc 1-100\a-t -- Set NPC custom sound Volume 1-100')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am volgm 1-100\a-t -- Set GM custom sound Volume 1-100')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-y- Ignore List -')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am ignoreadd pcname\a-t -- add pc to the ignore list')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am ignoredel pcname\a-t -- delete pc from the ignore list')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am ignorelist\a-t -- display ignore list')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-y- Spawns -')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am spawnadd npc\a-t -- add monster to the list of tracked spawns')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am spawndel npc\a-t -- delete monster from the list of tracked spawns')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am spawnlist\a-t -- display monsters being tracked for the current zone')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am show\a-t -- Toggles display of Search Window and Spawns for the current zone')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am aggro\a-t -- Toggles display of Aggro status bars in the search window.')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\a-y- Commands - executed when players remain in the alert radius for the reminder interval')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am cmdadd command\a-t -- add command to run when someone enters your alert radius')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am cmddel command\a-t -- delete command to run when someone enters your alert radius')
+			MyUI_Utils.PrintOutput('AlertMaster', nil, '\t\ay/am cmdlist\a-t -- display command(s) to run when someone enters your alert radius')
 		end
 	end
 	mq.bind('/alertmaster', bind_alertmaster)
 	mq.bind('/am', bind_alertmaster)
 end
 
+function Module.Unload()
+	mq.unbind('/alertmaster')
+	mq.unbind('/am')
+end
+
 local setup = function()
-	myName = mq.TLO.Me.Name() or 'Unknown'
 	originalVolume = getVolume()
 	active = true
 	radius = arg[1] or 200
 	zradius = arg[2] or 100
 	currZone = mq.TLO.Zone.ID()
 	lastZone = currZone
-	if TLO.Plugin('mq2eqbc').IsLoaded() then groupCmd = '/bcaa /' end
+	if mq.TLO.Plugin('mq2eqbc').IsLoaded() then groupCmd = '/bcaa /' end
 	load_settings()
 	load_binds()
-	mq.imgui.init("Alert_Master", DrawAlertGUI)
-	mq.imgui.init('config', Config_GUI)
 	-- Kickstart the data
-	GUI_Main.Refresh.Table.Rules = true
-	GUI_Main.Refresh.Table.Filtered = true
-	GUI_Main.Refresh.Table.Unhandled = true
-	mq.imgui.init('DrawSearchWindow', DrawSearchGUI)
-	print_ts('\ayAlert Master version:\a-g' ..
+	Module.GUI_Main.Refresh.Table.Rules = true
+	Module.GUI_Main.Refresh.Table.Filtered = true
+	Module.GUI_Main.Refresh.Table.Unhandled = true
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\ayAlert Master version:\a-g' ..
 		amVer .. '\n' .. MsgPrefix() .. '\ayOriginal by (\a-to_O\ay) Special.Ed (\a-tO_o\ay)\n' .. MsgPrefix() .. '\ayUpdated by (\a-tO_o\ay) Grimmier (\a-to_O\ay)')
-	print_ts('\atLoaded ' .. settings_file)
-	print_ts('\ay/am help for usage')
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\atLoaded ' .. settings_file)
+	MyUI_Utils.PrintOutput('AlertMaster', nil, '\ay/am help for usage')
 	print_status()
 	RefreshZone()
+	Module.IsRunning = true
+	if not loadedExeernally then
+		mq.imgui.init(Module.Name .. "##" .. MyUI_CharLoaded, Module.RenderGUI)
+		Module.LocalLoop()
+	end
 end
 
-local loop = function()
-	while true do
-		if TLO.Window('CharacterListWnd').Open() then return false end
+local cTime = os.time()
+local firstRun = true
+Module.MainLoop = function()
+	-- while true do
+	if currZone ~= lastZone then
+		numAlerts = 0
+		RefreshZone()
+		lastZone = currZone
+	end
+	if loadedExeernally then
+		if not MyUI_LoadModules.CheckRunning(Module.IsRunning, Module.Name) then return end
+	end
+
+	if not loadedExeernally or os.time() - cTime > delay or firstRun then
+		if mq.TLO.Window('CharacterListWnd').Open() then return false end
 		currZone = mq.TLO.Zone.ID()
 		check_for_zone_change()
 		check_for_spawns() -- always refresh spawn list and only alert if not a safe zone.(checked later in the function)
@@ -2394,20 +2393,15 @@ local loop = function()
 			check_for_gms()
 			check_for_announce()
 			check_for_pcs()
-		end
-		if currZone ~= lastZone then
-			numAlerts = 0
-			RefreshZone()
-			lastZone = currZone
-		end
-		--CMD('/echo '..numAlerts)
-		if check_safe_zone() ~= true then
+
 			if ((os.time() - alertTime) > (remindNPC * 60) and numAlerts > 0) then -- if we're past the alert remindnpc time and we have alerts to give
 				-- do text alerts
 				for _, v in pairs(tSpawns) do
-					local cleanName = tostring(v.DisplayName())
-					local distance = math.floor(v.Distance() or 0)
-					print_ts(GetCharZone() .. '\ag' .. cleanName .. '\ax spawn alert! ' .. distance .. ' units away.')
+					if v ~= nil then
+						local cleanName = v.DisplayName ~= nil and v.DisplayName or 'Unknown'
+						local distance = math.floor(v.Spawn.Distance() or 0)
+						MyUI_Utils.PrintOutput('AlertMaster', nil, GetCharZone() .. '\ag' .. cleanName .. '\ax spawn alert! ' .. distance .. ' units away.')
+					end
 				end
 				--do beep alerts
 				if doBeep or doSoundNPC then
@@ -2415,7 +2409,7 @@ local loop = function()
 						setVolume(volNPC)
 						playSound(soundNPC)
 					else
-						CMD('/beep')
+						mq.cmdf('/beep')
 					end
 				end
 				--do popup alerts
@@ -2431,22 +2425,33 @@ local loop = function()
 			end
 		end
 
-		if playing and playTime > 0 then
-			local cTime = os.time()
-			if cTime - playTime > 2 then
-				resetVolume()
-				mq.delay(1)
-			end
+		cTime = os.time()
+		firstRun = false
+	end
+
+	if playing and playTime > 0 then
+		local sTime = os.time()
+		if sTime - playTime > 2 then
+			resetVolume()
 		end
-		if not playing and playTime == 0 then
-			-- we aren't playing anything so we can double check the original voulme wasn't changed by the user.
-			originalVolume = getVolume()
-		end
-		if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
-		if GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
+	end
+
+	if not playing and playTime == 0 then
+		-- we aren't playing anything so we can double check the original voulme wasn't changed by the user.
+		originalVolume = getVolume()
+	end
+
+	if Module.GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
+	if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
+end
+
+function Module.LocalLoop()
+	while Module.IsRunning do
+		Module.MainLoop()
 		mq.delay(delay .. 's')
 	end
 end
 
 setup()
-loop()
+
+return Module
