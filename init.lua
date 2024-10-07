@@ -27,15 +27,21 @@ local mq = require('mq')
 local ImGui = require('ImGui')
 Module = {}
 Module.Name = 'AlertMaster'
+local soundsPath = string.format("%s/myui/sounds/default/", mq.TLO.Lua.Dir())
 
-local loadedExeernally = MyUI_ScriptName ~= nil and true or false
-if not loadedExeernally then
+Module = {}
+Module.Name = 'AlertMaster'
+---@diagnostic disable-next-line:undefined-global
+local loadedExeternally = MyUI_ScriptName ~= nil and true or false
+if not loadedExeternally then
 	MyUI_Utils      = require('lib.common')
 	MyUI_CharLoaded = mq.TLO.Me.DisplayName()
 	MyUI_Colors     = require('lib.colors')
 	MyUI_Guild      = mq.TLO.Me.Guild()
 	MyUI_Icons      = require('mq.ICONS')
+	soundsPath      = string.format("%s/alertmaster/sounds/", mq.TLO.Lua.Dir())
 end
+
 -- Variables
 local arg = { ..., }
 local amVer = '2.07'
@@ -225,7 +231,6 @@ Module.GUI_Alert = {
 }
 ------- Sounds ----------
 local ffi = require("ffi")
-local soundsPath = string.format("%s/alertmaster/sounds/", mq.TLO.Lua.Dir())
 -- C code definitions
 ffi.cdef [[
 int sndPlaySoundA(const char *pszSound, unsigned int fdwSound);
@@ -2365,7 +2370,7 @@ local setup = function()
 	print_status()
 	RefreshZone()
 	Module.IsRunning = true
-	if not loadedExeernally then
+	if not loadedExeternally then
 		mq.imgui.init(Module.Name .. "##" .. MyUI_CharLoaded, Module.RenderGUI)
 		Module.LocalLoop()
 	end
@@ -2380,11 +2385,12 @@ Module.MainLoop = function()
 		RefreshZone()
 		lastZone = currZone
 	end
-	if loadedExeernally then
+	if loadedExeternally then
+		---@diagnostic disable-next-line: undefined-global
 		if not MyUI_LoadModules.CheckRunning(Module.IsRunning, Module.Name) then return end
 	end
 
-	if not loadedExeernally or os.time() - cTime > delay or firstRun then
+	if not loadedExeternally or os.time() - cTime > delay or firstRun then
 		if mq.TLO.Window('CharacterListWnd').Open() then return false end
 		currZone = mq.TLO.Zone.ID()
 		check_for_zone_change()
@@ -2444,7 +2450,10 @@ Module.MainLoop = function()
 	if Module.GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
 	if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
 end
-
+if mq.TLO.EverQuest.GameState() ~= "INGAME" then
+	printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", script)
+	mq.exit()
+end
 function Module.LocalLoop()
 	while Module.IsRunning do
 		Module.MainLoop()
