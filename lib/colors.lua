@@ -1,10 +1,10 @@
 local ColorList = {}
 
----comment Color table for GUI returns ImVec4
+--- Color table for GUI returns ImVec4
 ---Valud colors are:
 ---(red, pink, orange, yellow, yellow2, white, blue, softblue, light blue2, light blue,teal, green, green2, grey, purple, btn_red, btn_green)
----@param color_name string @ the name of the color you want to return
----@return ImVec4 @ returns color as an ImVec4 vector
+---@param color_name string  the name of the color you want to return
+---@return ImVec4  returns color as an ImVec4 vector
 function ColorList.color(color_name)
     color_name = color_name:lower()
     if (color_name == 'red') then return ImVec4(0.9, 0.1, 0.1, 1) end

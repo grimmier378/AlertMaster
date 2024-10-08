@@ -27,10 +27,9 @@ local mq = require('mq')
 local ImGui = require('ImGui')
 Module = {}
 Module.Name = 'AlertMaster'
-local soundsPath = string.format("%s/myui/sounds/default/", mq.TLO.Lua.Dir())
+Module.Path = MyUI_Path ~= nil and MyUI_Path or string.format("%s/%s/", mq.luaDir, Module.Name)
+Module.SoundPath = string.format("%s/sounds/default/", Module.Path)
 
-Module = {}
-Module.Name = 'AlertMaster'
 ---@diagnostic disable-next-line:undefined-global
 local loadedExeternally = MyUI_ScriptName ~= nil and true or false
 if not loadedExeternally then
@@ -39,7 +38,6 @@ if not loadedExeternally then
 	MyUI_Colors     = require('lib.colors')
 	MyUI_Guild      = mq.TLO.Me.Guild()
 	MyUI_Icons      = require('mq.ICONS')
-	soundsPath      = string.format("%s/alertmaster/sounds/", mq.TLO.Lua.Dir())
 end
 
 -- Variables
@@ -259,7 +257,7 @@ end
 
 -- Function to play sound allowing for simultaneous plays
 local function playSound(name)
-	local filename = soundsPath .. name
+	local filename = Module.SoundPath .. name
 	playTime = os.time()
 	playing = true
 	winmm.sndPlaySoundA(filename, flags)
@@ -2371,7 +2369,7 @@ local setup = function()
 	RefreshZone()
 	Module.IsRunning = true
 	if not loadedExeternally then
-		mq.imgui.init(Module.Name .. "##" .. MyUI_CharLoaded, Module.RenderGUI)
+		mq.imgui.init(Module.Name, Module.RenderGUI)
 		Module.LocalLoop()
 	end
 end
@@ -2451,7 +2449,7 @@ Module.MainLoop = function()
 	if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
 end
 if mq.TLO.EverQuest.GameState() ~= "INGAME" then
-	printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", script)
+	printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", Module.Name)
 	mq.exit()
 end
 function Module.LocalLoop()
