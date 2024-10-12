@@ -79,7 +79,7 @@ local zSettings = false
 local theme = require('defaults.themes')
 local useThemeName = 'Default'
 local openConfigGUI = false
-local themeFile = mq.configDir .. '/MyThemeZ.lua'
+local themeFile = MyUI_ThemeFile == nil and string.format('%s/MyUI/ThemeZ.lua', mq.configDir) or MyUI_ThemeFile
 local ZoomLvl = 1.0
 local doOnce = true
 local ColorCountAlert, ColorCountConf, StyleCountConf, StyleCountAlert = 0, 0, 0, 0
@@ -2448,6 +2448,7 @@ Module.MainLoop = function()
 	if Module.GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
 	if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
 end
+
 if mq.TLO.EverQuest.GameState() ~= "INGAME" then
 	printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", Module.Name)
 	mq.exit()
