@@ -1,9 +1,6 @@
 local mq = require('mq')
 local ImGui = require('ImGui')
 local CommonUtils = require('mq.Utils')
-if MyUI_PackageMan == nil then
-	MyUI_PackageMan = require('mq.PackageMan')
-end
 
 CommonUtils.Animation_Item = mq.FindTextureAnimation('A_DragItem')
 CommonUtils.Animation_Spell = mq.FindTextureAnimation('A_SpellIcons')
@@ -112,6 +109,17 @@ function CommonUtils.PrintOutput(mychat_tab, main_console, msg, ...)
 	end
 end
 
+function CommonUtils.GetNextID(table)
+	local maxID = 0
+	for k, _ in pairs(table) do
+		local numericId = tonumber(k)
+		if numericId and numericId > maxID then
+			maxID = numericId
+		end
+	end
+	return maxID + 1
+end
+
 --- Takes in a table or sorted index,key pairs and returns a sorted table of keys based on the number of columns to sorty by.
 ---
 ---This will keep your table sorted by columns instead of rows.
@@ -158,6 +166,21 @@ function CommonUtils.SortKeys(input_table)
 
 	table.sort(keys) -- Sort the keys
 	return keys
+end
+
+function CommonUtils.Deepcopy(orig)
+	local orig_type = type(orig)
+	local copy
+	if orig_type == 'table' then
+		copy = {}
+		for orig_key, orig_value in next, orig, nil do
+			copy[CommonUtils.Deepcopy(orig_key)] = CommonUtils.Deepcopy(orig_value)
+		end
+		setmetatable(copy, CommonUtils.Deepcopy(getmetatable(orig)))
+	else -- number, string, boolean, etc
+		copy = orig
+	end
+	return copy
 end
 
 ---
@@ -227,108 +250,105 @@ function CommonUtils.AppendColoredTimestamp(console, timestamp, text, textColor,
 end
 
 function CommonUtils.GiveItem(target_id)
+	if target_id == nil then return end
 	if ImGui.IsMouseReleased(ImGuiMouseButton.Left) then
 		mq.cmdf("/target id %s", target_id)
 		if mq.TLO.Cursor() then
-			if mq.TLO.Target.Distance() > 10 then
-				mq.cmdf("/multiline ; /tar id %s; /timed 5, /nav id %s dist=10; /timed 20, /click left target", target_id, target_id)
-			else
-				mq.cmdf('/multiline ; /tar id %s; /timed 2, /face; /timed 5, /click left target', target_id)
-			end
+			mq.cmdf('/multiline ; /tar id %s; /timed 2, /face; /timed 5, /click left target', target_id)
 		end
 	end
 end
 
---- File Picker Dialog Stuff --
+-- --- File Picker Dialog Stuff --
 
-CommonUtils.SelectedFilePath = string.format('%s/', mq.TLO.MacroQuest.Path()) -- Default config folder path prefix
-CommonUtils.CurrentDirectory = mq.TLO.MacroQuest.Path()
-CommonUtils.SelectedFile = nil
+-- CommonUtils.SelectedFilePath = string.format('%s/', mq.TLO.MacroQuest.Path()) -- Default config folder path prefix
+-- CommonUtils.CurrentDirectory = mq.TLO.MacroQuest.Path()
+-- CommonUtils.SelectedFile = nil
 
-local lfs = MyUI_PackageMan.Require('luafilesystem', 'lfs')
-CommonUtils.ShowSaveFileSelector = false
-CommonUtils.ShowOpenFileSelector = false
+-- local lfs = MyUI_PackageMan.Require('luafilesystem', 'lfs')
+-- CommonUtils.ShowSaveFileSelector = false
+-- CommonUtils.ShowOpenFileSelector = false
 
--- Function to get the contents of a directory
-function CommonUtils.GetDirectoryContents(path)
-	local folders = {}
-	local files = {}
-	for file in lfs.dir(path) do
-		if file ~= "." and file ~= ".." then
-			local f = path .. '/' .. file
-			local attr = lfs.attributes(f)
-			if attr.mode == "directory" then
-				table.insert(folders, file)
-			elseif attr.mode == "file" then
-				table.insert(files, file)
-			end
-		end
-	end
-	return folders, files
-end
+-- -- Function to get the contents of a directory
+-- function CommonUtils.GetDirectoryContents(path)
+-- 	local folders = {}
+-- 	local files = {}
+-- 	for file in lfs.dir(path) do
+-- 		if file ~= "." and file ~= ".." then
+-- 			local f = path .. '/' .. file
+-- 			local attr = lfs.attributes(f)
+-- 			if attr.mode == "directory" then
+-- 				table.insert(folders, file)
+-- 			elseif attr.mode == "file" then
+-- 				table.insert(files, file)
+-- 			end
+-- 		end
+-- 	end
+-- 	return folders, files
+-- end
 
--- Function to draw the folder button tree
-function CommonUtils.DrawFolderButtonTree(currentPath)
-	local folders = {}
-	for folder in string.gmatch(currentPath, "[^/]+") do
-		table.insert(folders, folder)
-	end
+-- -- Function to draw the folder button tree
+-- function CommonUtils.DrawFolderButtonTree(currentPath)
+-- 	local folders = {}
+-- 	for folder in string.gmatch(currentPath, "[^/]+") do
+-- 		table.insert(folders, folder)
+-- 	end
 
-	local path = ""
-	for i, folder in ipairs(folders) do
-		path = path .. folder .. "/"
-		ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.2, 0.2, 0.2, 1))
-		local btnLblFolder = string.format("^%s", mq.TLO.MacroQuest.Path())
-		btnLblFolder = folder:gsub(btnLblFolder, "...")
-		if ImGui.Button(btnLblFolder) then
-			CommonUtils.CurrentDirectory = path:gsub("/$", "")
-		end
-		ImGui.PopStyleColor()
-		if i < #folders then
-			ImGui.SameLine()
-			ImGui.Text("/")
-			ImGui.SameLine()
-		end
-	end
-end
+-- 	local path = ""
+-- 	for i, folder in ipairs(folders) do
+-- 		path = path .. folder .. "/"
+-- 		ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.2, 0.2, 0.2, 1))
+-- 		local btnLblFolder = string.format("^%s", mq.TLO.MacroQuest.Path())
+-- 		btnLblFolder = folder:gsub(btnLblFolder, "...")
+-- 		if ImGui.Button(btnLblFolder) then
+-- 			CommonUtils.CurrentDirectory = path:gsub("/$", "")
+-- 		end
+-- 		ImGui.PopStyleColor()
+-- 		if i < #folders then
+-- 			ImGui.SameLine()
+-- 			ImGui.Text("/")
+-- 			ImGui.SameLine()
+-- 		end
+-- 	end
+-- end
 
--- Function to draw the file selector
-function CommonUtils.DrawFileSelector()
-	-- CommonUtils.DrawFolderButtonTree(CommonUtils.CurrentDirectory)
-	ImGui.Separator()
-	local folders, files = CommonUtils.GetDirectoryContents(CommonUtils.CurrentDirectory)
-	if CommonUtils.CurrentDirectory ~= mq.TLO.MacroQuest.Path() then
-		if ImGui.Button("Back") then
-			CommonUtils.CurrentDirectory = CommonUtils.CurrentDirectory:match("(.*)/[^/]+$")
-		end
-		ImGui.SameLine()
-	end
-	local tmpFolder = CommonUtils.CurrentDirectory:gsub(mq.TLO.MacroQuest.Path() .. "/", "")
-	ImGui.SetNextItemWidth(180)
-	if ImGui.BeginCombo("Select Folder", tmpFolder) then
-		for _, folder in ipairs(folders) do
-			if ImGui.Selectable(folder) then
-				CommonUtils.CurrentDirectory = CommonUtils.CurrentDirectory .. '/' .. folder
-			end
-		end
-		ImGui.EndCombo()
-	end
+-- -- Function to draw the file selector
+-- function CommonUtils.DrawFileSelector()
+-- 	-- CommonUtils.DrawFolderButtonTree(CommonUtils.CurrentDirectory)
+-- 	ImGui.Separator()
+-- 	local folders, files = CommonUtils.GetDirectoryContents(CommonUtils.CurrentDirectory)
+-- 	if CommonUtils.CurrentDirectory ~= mq.TLO.MacroQuest.Path() then
+-- 		if ImGui.Button("Back") then
+-- 			CommonUtils.CurrentDirectory = CommonUtils.CurrentDirectory:match("(.*)/[^/]+$")
+-- 		end
+-- 		ImGui.SameLine()
+-- 	end
+-- 	local tmpFolder = CommonUtils.CurrentDirectory:gsub(mq.TLO.MacroQuest.Path() .. "/", "")
+-- 	ImGui.SetNextItemWidth(180)
+-- 	if ImGui.BeginCombo("Select Folder", tmpFolder) then
+-- 		for _, folder in ipairs(folders) do
+-- 			if ImGui.Selectable(folder) then
+-- 				CommonUtils.CurrentDirectory = CommonUtils.CurrentDirectory .. '/' .. folder
+-- 			end
+-- 		end
+-- 		ImGui.EndCombo()
+-- 	end
 
-	local tmpfile = CommonUtils.SelectedFilePath:gsub(CommonUtils.CurrentDirectory .. "/", "")
-	ImGui.SetNextItemWidth(180)
-	if ImGui.BeginCombo("Select File", tmpfile or "Select a file") then
-		for _, file in ipairs(files) do
-			if ImGui.Selectable(file) then
-				CommonUtils.SelectedFile = file
-				CommonUtils.SelectedFilePath = CommonUtils.CurrentDirectory .. '/' .. CommonUtils.SelectedFile
-				CommonUtils.ShowOpenFileSelector = false
-			end
-		end
-		ImGui.EndCombo()
-	end
-	if ImGui.Button('Cancel##Open') then
-		CommonUtils.ShowOpenFileSelector = false
-	end
-end
+-- 	local tmpfile = CommonUtils.SelectedFilePath:gsub(CommonUtils.CurrentDirectory .. "/", "")
+-- 	ImGui.SetNextItemWidth(180)
+-- 	if ImGui.BeginCombo("Select File", tmpfile or "Select a file") then
+-- 		for _, file in ipairs(files) do
+-- 			if ImGui.Selectable(file) then
+-- 				CommonUtils.SelectedFile = file
+-- 				CommonUtils.SelectedFilePath = CommonUtils.CurrentDirectory .. '/' .. CommonUtils.SelectedFile
+-- 				CommonUtils.ShowOpenFileSelector = false
+-- 			end
+-- 		end
+-- 		ImGui.EndCombo()
+-- 	end
+-- 	if ImGui.Button('Cancel##Open') then
+-- 		CommonUtils.ShowOpenFileSelector = false
+-- 	end
+-- end
 
 return CommonUtils

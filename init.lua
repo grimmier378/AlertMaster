@@ -59,7 +59,7 @@ local CharConfig = 'Char_' .. mq.TLO.Me.DisplayName() .. '_Config'
 local CharCommands = 'Char_' .. mq.TLO.Me.DisplayName() .. '_Commands'
 local defaultConfig = { delay = 1, remindNPC = 5, remind = 30, aggro = false, pcs = true, spawns = true, gms = true, announce = false, ignoreguild = true, beep = false, popup = false, distmid = 600, distfar = 1200, locked = false, }
 local tSafeZones, spawnAlerts, spawnsSpawnMaster, settings = {}, {}, {}, {}
-local npcs, tAnnounce, tPlayers, tSpawns, tGMs = {}, {}, {}, {}, {}
+local tAnnounce, tPlayers, tSpawns, tGMs = {}, {}, {}, {}
 local alertTime, numAlerts = 0, 0
 local volNPC, volGM, volPC, volPCEntered, volPCLeft = 100, 100, 100, 100, 100
 local zone_id = Zone.ID() or 0
@@ -79,7 +79,7 @@ local zSettings = false
 local theme = require('defaults.themes')
 local useThemeName = 'Default'
 local openConfigGUI = false
-local themeFile = MyUI_ThemeFile == nil and string.format('%s/MyUI/ThemeZ.lua', mq.configDir) or MyUI_ThemeFile
+local themeFile = mq.configDir .. '/MyThemeZ.lua'
 local ZoomLvl = 1.0
 local doOnce = true
 local ColorCountAlert, ColorCountConf, StyleCountConf, StyleCountAlert = 0, 0, 0, 0
@@ -1061,7 +1061,7 @@ local function DrawToggles()
 		ImGui.Text("Lock Window")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine()
+	-- ImGui.SameLine()
 	local gIcon = MyUI_Icons.MD_SETTINGS
 	if ImGui.SmallButton(gIcon) then
 		openConfigGUI = not openConfigGUI
@@ -1073,7 +1073,7 @@ local function DrawToggles()
 		ImGui.Text("Config")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine()
+	-- ImGui.SameLine()
 	-- Alert Popup Toggle Button
 	if doAlert then
 		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
@@ -1089,7 +1089,7 @@ local function DrawToggles()
 		ImGui.Text("Toggle Popup Alerts On\\Off")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine()
+	-- ImGui.SameLine()
 	-- Beep Alert Toggle Button
 	if doBeep then
 		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
@@ -1105,7 +1105,7 @@ local function DrawToggles()
 		ImGui.Text("Toggle Beep Alerts On\\Off")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine()
+	-- ImGui.SameLine()
 	-- Alert Window Toggle Button
 	if AlertWindowOpen then
 		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
@@ -1121,7 +1121,7 @@ local function DrawToggles()
 		ImGui.Text("Show\\Hide Alert Window")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine()
+	-- ImGui.SameLine()
 	-- Button to add the new spawn
 	if ImGui.SmallButton(MyUI_Icons.FA_HASHTAG) then
 		mq.cmdf('/am spawnadd ${Target}')
@@ -1132,7 +1132,7 @@ local function DrawToggles()
 		ImGui.Text("Add Target #Dirty_Name0 to SpawnList")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine()
+	-- ImGui.SameLine()
 	-- Button to add the new spawn
 	if ImGui.SmallButton(MyUI_Icons.FA_BULLSEYE) then
 		mq.cmdf('/am spawnadd "${Target.DisplayName}"')
@@ -1143,7 +1143,7 @@ local function DrawToggles()
 		ImGui.Text("Add Target Clean Name to SpawnList\nThis is handy if you are hunting a specific type of Mob,\ntarget a moss snake and add, you will get all \"a moss snake\"")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine(ImGui.GetWindowWidth() - 120)
+	-- ImGui.SameLine(ImGui.GetWindowWidth() - 120)
 	-- Arrow Status Toggle Button
 	if DoDrawArrow then
 		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
@@ -1165,7 +1165,7 @@ local function DrawToggles()
 		ImGui.Text("Toggle Drawing Arrows On\\Off")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine(ImGui.GetWindowWidth() - 90)
+	-- ImGui.SameLine(ImGui.GetWindowWidth() - 90)
 	-- Aggro Status Toggle Button
 	if showAggro then
 		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
@@ -1181,7 +1181,7 @@ local function DrawToggles()
 		ImGui.Text("Toggle Aggro Status On\\Off")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine(ImGui.GetWindowWidth() - 60)
+	-- ImGui.SameLine(ImGui.GetWindowWidth() - 60)
 	-- Alert Master Scanning Toggle Button
 	if active then
 		ImGui.PushStyleColor(ImGuiCol.Button, MyUI_Colors.color('btn_green')) -- Green for enabled
@@ -1197,9 +1197,9 @@ local function DrawToggles()
 		ImGui.Text("Toggle ALL Scanning and Alerts On\\Off")
 		ImGui.EndTooltip()
 	end
-	ImGui.SameLine()
+	-- ImGui.SameLine()
 	-- Place a help icon
-	ImGui.SameLine(ImGui.GetWindowWidth() - 30) -- Position at right end of line.
+	-- ImGui.SameLine(ImGui.GetWindowWidth() - 30) -- Position at right end of line.
 	if showTooltips then
 		ImGui.Text(MyUI_Icons.MD_HELP)
 	else
@@ -1394,13 +1394,14 @@ local function DrawSearchWindow()
 			ImGui.SetWindowFontScale(ZoomLvl)
 			if ImGui.BeginTable('##RulesTable', 8, Module.GUI_Main.Table.Flags) then
 				ImGui.TableSetupScrollFreeze(0, 1)
-				ImGui.TableSetupColumn(MyUI_Icons.FA_USER_PLUS, ImGuiTableColumnFlags.NoSort, 15, Module.GUI_Main.Table.Column_ID.Remove)
-				ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 120, Module.GUI_Main.Table.Column_ID.MobName)
-				ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.DefaultSort, 30, Module.GUI_Main.Table.Column_ID.MobLvl)
-				ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort, 40, Module.GUI_Main.Table.Column_ID.MobDist)
-				ImGui.TableSetupColumn("Aggro", ImGuiTableColumnFlags.DefaultSort, 30, Module.GUI_Main.Table.Column_ID.MobAggro)
-				ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.DefaultSort, 30, Module.GUI_Main.Table.Column_ID.MobID)
-				ImGui.TableSetupColumn("Loc", ImGuiTableColumnFlags.NoSort, 90, Module.GUI_Main.Table.Column_ID.MobLoc)
+				ImGui.TableSetupColumn(MyUI_Icons.FA_USER_PLUS, bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 15, Module.GUI_Main.Table.Column_ID
+					.Remove)
+				ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 120, Module.GUI_Main.Table.Column_ID.MobName)
+				ImGui.TableSetupColumn("Lvl", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobLvl)
+				ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 40, Module.GUI_Main.Table.Column_ID.MobDist)
+				ImGui.TableSetupColumn("Aggro", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobAggro)
+				ImGui.TableSetupColumn("ID", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobID)
+				ImGui.TableSetupColumn("Loc", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 90, Module.GUI_Main.Table.Column_ID.MobLoc)
 				ImGui.TableSetupColumn(MyUI_Icons.FA_COMPASS, bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.WidthFixed), 15,
 					Module.GUI_Main.Table.Column_ID.MobDirection)
 				ImGui.TableHeadersRow()
@@ -1487,8 +1488,8 @@ local function DrawSearchWindow()
 				if ImGui.BeginTable("NPCListTable", 3, spawnListFlags) then
 					-- Set up table headers
 					ImGui.TableSetupScrollFreeze(0, 1)
-					ImGui.TableSetupColumn("NPC Name##AMList", ImGuiTableColumnFlags.None)
-					ImGui.TableSetupColumn("Zone##AMList", ImGuiTableColumnFlags.None)
+					ImGui.TableSetupColumn("NPC Name##AMList")
+					ImGui.TableSetupColumn("Zone##AMList")
 					ImGui.TableSetupColumn(" " .. btnIconDel .. "##AMList", bit32.bor(ImGuiTableColumnFlags.WidthFixed,
 						ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.NoResize), 20)
 					ImGui.TableHeadersRow()
@@ -1598,8 +1599,8 @@ local function Config_GUI()
 		if ImGui.CollapsingHeader('Toggles##AlertMaster') then
 			local keys = {}
 			if ImGui.BeginTable('##ToggleTable', 2, ImGuiTableFlags.Resizable) then
-				ImGui.TableSetupColumn('##ToggleCol1', ImGuiTableColumnFlags.None)
-				ImGui.TableSetupColumn('##ToggleCol2', ImGuiTableColumnFlags.None)
+				ImGui.TableSetupColumn('##ToggleCol1')
+				ImGui.TableSetupColumn('##ToggleCol2')
 				ImGui.TableNextRow()
 				for k, v in pairs(settings[CharConfig]) do
 					if type(v) == 'boolean' then
@@ -1783,8 +1784,8 @@ local function Config_GUI()
 
 		if ImGui.CollapsingHeader("Commands") then
 			if ImGui.BeginTable("CommandTable", 2, ImGuiTableFlags.Resizable) then
-				ImGui.TableSetupColumn("Command", ImGuiTableColumnFlags.None)
-				ImGui.TableSetupColumn("Text", ImGuiTableColumnFlags.None)
+				ImGui.TableSetupColumn("Command")
+				ImGui.TableSetupColumn("Text")
 				for key, command in pairs(settings[CharCommands]) do
 					local tmpCmd = command
 					ImGui.TableNextRow()
@@ -1824,8 +1825,8 @@ local function BuildAlertRows() -- Build the Button Rows for the GUI Window
 		local sizeX = ImGui.GetContentRegionAvail() - 4
 		if ImGui.BeginTable("AlertTable", 3, Module.GUI_Alert.Table.Flags) then
 			ImGui.TableSetupScrollFreeze(0, 1)
-			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.DefaultSort), 90, Module.GUI_Alert.Table.Column_ID.MobName)
-			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.DefaultSort), 50, Module.GUI_Alert.Table.Column_ID.MobDist)
+			ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.DefaultSort, ImGuiTableColumnFlags.WidthFixed), 90, Module.GUI_Alert.Table.Column_ID.MobName)
+			ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.DefaultSort, ImGuiTableColumnFlags.WidthFixed), 50, Module.GUI_Alert.Table.Column_ID.MobDist)
 			ImGui.TableSetupColumn("Dir", bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 30,
 				Module.GUI_Alert.Table.Column_ID.MobDirection)
 			ImGui.TableHeadersRow()
@@ -2431,6 +2432,8 @@ Module.MainLoop = function()
 
 		cTime = os.time()
 		firstRun = false
+		if Module.GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
+		if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
 	end
 
 	if playing and playTime > 0 then
@@ -2444,19 +2447,17 @@ Module.MainLoop = function()
 		-- we aren't playing anything so we can double check the original voulme wasn't changed by the user.
 		originalVolume = getVolume()
 	end
-
-	if Module.GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
-	if SearchWindow_Show == true or #Table_Cache.Mobs < 1 then RefreshZone() end
 end
 
 if mq.TLO.EverQuest.GameState() ~= "INGAME" then
 	printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", Module.Name)
 	mq.exit()
 end
+
 function Module.LocalLoop()
 	while Module.IsRunning do
 		Module.MainLoop()
-		mq.delay(delay .. 's')
+		mq.delay(1)
 	end
 end
 
