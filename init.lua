@@ -46,9 +46,7 @@ local amVer = '2.07'
 local SpawnCount = mq.TLO.SpawnCount
 local NearestSpawn = mq.TLO.NearestSpawn
 local smSettings = mq.configDir .. '/MQ2SpawnMaster.ini'
-local config_dir = mq.TLO.MacroQuest.Path():gsub('\\', '/')
-local settings_file = '/config/AlertMaster.ini'
-local settings_path = config_dir .. settings_file
+local settings_file = mq.configDir .. '/AlertMaster.ini'
 local smImportList = mq.configDir .. '/am_imports.lua'
 local Group = mq.TLO.Group
 local Raid = mq.TLO.Raid
@@ -303,7 +301,7 @@ local function print_status()
 end
 
 local save_settings = function()
-	LIP.save(settings_path, settings)
+	LIP.save(settings_file, settings)
 end
 
 local check_safe_zone = function()
@@ -338,8 +336,8 @@ local function import_spawnmaster(val)
 end
 
 local function load_settings()
-	if MyUI_Utils.File.Exists(settings_path) then
-		settings = LIP.load(settings_path)
+	if MyUI_Utils.File.Exists(settings_file) then
+		settings = LIP.load(settings_file)
 	else
 		settings = {
 			[CharConfig] = defaultConfig,
