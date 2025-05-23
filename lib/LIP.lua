@@ -62,7 +62,11 @@ function LIP.load(fileName)
 				count = count + 1
 				param = string.format("Spawn%d", count)
 			end
-			data[section][param] = value;
+			if param then
+				data[section][param] = value;
+			else
+				print("param is nil")
+			end
 		end
 	end
 	file:close();
