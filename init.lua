@@ -445,6 +445,10 @@ local function set_settings()
 	Module.Settings[CharConfig]['volPCEntered'] = volPCEntered
 	volPCLeft = Module.Settings[CharConfig]['volPCLeft'] or volPCLeft
 	Module.Settings[CharConfig]['volPCLeft'] = volPCLeft
+	doSoundPCLeft = Module.Settings[CharConfig]['doSoundPCLeft'] or false
+	Module.Settings[CharConfig]['doSoundPCLeft'] = doSoundPCLeft
+	doSoundPCEntered = Module.Settings[CharConfig]['doSoundPCEntered'] or false
+	Module.Settings[CharConfig]['doSoundPCEntered'] = doSoundPCEntered
 end
 
 local function load_settings()
@@ -1298,6 +1302,8 @@ local function addSpawnToList(name)
 end
 
 local function DrawRuleRow(entry)
+	local spawn = mq.TLO.Spawn(entry.MobID)
+	if not spawn() then return end
 	ImGui.TableNextColumn()
 	-- Add to Spawn List Button
 	if ImGui.SmallButton(Module.Icons.FA_USER_PLUS) then addSpawnToList(entry.MobName) end
@@ -1368,6 +1374,7 @@ end
 local function DrawAlertRuleRow(entry)
 	local sHeadingTo = entry.MobDirection
 	local spawn = mq.TLO.Spawn(entry.MobID)
+	if not spawn() then return end
 	ImGui.TableSetColumnIndex(0)
 	ImGui.PushStyleColor(ImGuiCol.Text, Module.Colors.color('green'))
 	ImGui.Text(entry.MobName)
@@ -1391,9 +1398,9 @@ local function DrawAlertRuleRow(entry)
 	ImGui.PopStyleColor()
 
 	ImGui.TableSetColumnIndex(2)
-	local distance = math.floor(spawn.Distance() or 0)
+	local distance = math.floor(spawn.Distance() or -1)
 	ImGui.PushStyleColor(ImGuiCol.Text, ColorDistance(distance))
-	ImGui.Text('\t' .. tostring(distance))
+	ImGui.Text('%s', tostring(distance))
 	ImGui.PopStyleColor()
 	ImGui.TableSetColumnIndex(3)
 	--if DoDrawArrow then
