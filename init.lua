@@ -1,26 +1,26 @@
 --[[
-	Created by Special.Ed
-	Shout out to the homies:
-	Lads
-	Dannuic (my on again off again thing)
-	Knightly (no, i won't take that bet)
+Created by Special.Ed
+Shout out to the homies:
+Lads
+Dannuic (my on again off again thing)
+Knightly (no, i won't take that bet)
 --]]
 --[[
-	Modified by Grimmier
-	Added a GUI and commands.
-	** Commands **
-	* /alertmaster show will toggle the search window.
-	* /alertmaster popup will toggle the alert popup window.
-	** Search Window **
-	* You can search with the search box
-	* Clicking the check box for track, and the spawn will be added to spawnlist
-	* Clicking ignore will remove the spawn from the list if it exists.
-	* you can navTo any spawn in the search window by clicking the button, rightclicking the name will target the spawn.
-	** Alert Window **
-	* The Alert Popup Window lists the spawns that you are tracking and are alive. Shown as "Name : Distance"
-	* Clicking the button on the Alert Window will NavTo the spawn.
-	* Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
-	* remind setting is in minutes.
+Modified by Grimmier
+Added a GUI and commands.
+** Commands **
+* /alertmaster show will toggle the search window.
+* /alertmaster popup will toggle the alert popup window.
+** Search Window **
+* You can search with the search box
+* Clicking the check box for track, and the spawn will be added to spawnlist
+* Clicking ignore will remove the spawn from the list if it exists.
+* you can navTo any spawn in the search window by clicking the button, rightclicking the name will target the spawn.
+** Alert Window **
+* The Alert Popup Window lists the spawns that you are tracking and are alive. Shown as "Name : Distance"
+* Clicking the button on the Alert Window will NavTo the spawn.
+* Closing the Alert Popup will keep it closed until something changes or your remind timer is up.
+* remind setting is in minutes.
 ]]
 local LIP = require('lib.lip')
 local mq = require('mq')
@@ -48,6 +48,9 @@ if not loadedExeternally then
 	Module.Path        = string.format("%s/%s/", mq.luaDir, Module.Name)
 	Module.Server      = mq.TLO.EverQuest.Server()
 	Module.Build       = mq.TLO.MacroQuest.BuildName()
+	Module.PackageMan  = require('mq.PackageMan')
+	Module.SQLite3     = require('lsqlite3')
+	Module.Actors      = require('actors')
 else
 	Module.Utils = MyUI_Utils
 	Module.CharLoaded = MyUI_CharLoaded
@@ -60,9 +63,15 @@ else
 	Module.Path = MyUI_Path
 	Module.Server = MyUI_Server
 	Module.Build = MyUI_Build
+	Module.SQLite3 = MyUI_SQLite3
+	Module.Actors = MyUI_Actor
 end
+
+
+Module.ActorMailBox                                                                                                                    = 'alertmaster'
 Module.SoundPath                                                                                                                       = string.format("%s/sounds/default/",
 	Module.Path)
+
 local Utils                                                                                                                            = Module.Utils
 local ToggleFlags                                                                                                                      = bit32.bor(
 	Utils.ImGuiToggleFlags.PulseOnHover,
@@ -133,9 +142,10 @@ local originalVolume                                                            
 local playTime                                                                                                                         = 0
 local playing                                                                                                                          = false
 local currZone, lastZone
-local newSMFile                                                                                                                        = mq.configDir .. '/MyUI/MQ2SpawnMaster.ini'
+-- local newSMFile                                                                                                                        = mq.configDir .. '/MyUI/MQ2SpawnMaster.ini'
 local execCommands                                                                                                                     = false
-
+local displayTablePlayers                                                                                                              = {}
+local numDisplayPlayers                                                                                                                = 0
 local DistColorRanges                                                                                                                  = {
 	orange = 600, -- distance the color changes from green to orange
 	red = 1200, -- distance the color changes from orange to red
@@ -274,8 +284,15 @@ Module.GUI_Alert                                                                
 Module.Settings                                                                                                                        = {}
 Module.Settings[CharConfig]                                                                                                            = {}
 Module.Settings[CharCommands]                                                                                                          = {}
+Module.DBPath                                                                                                                          = string.format(
+	"%s/MyUI/AlertMaster/%s/AlertMasterSpawns.db", mq.configDir, Module.Server)
+Module.WatchedSpawns                                                                                                                   = {}
+local pSuccess                                                                                                                         = false
+pSuccess, Module.ZoneList                                                                                                              = pcall(require, 'lib.zone-list')
+if not pSuccess then Module.ZoneList = {} end
+Module.TempSettings = {}
 ------- Sounds ----------
-local ffi                                                                                                                              = require("ffi")
+local ffi           = require("ffi")
 -- C code definitions
 ffi.cdef [[
 int sndPlaySoundA(const char *pszSound, unsigned int fdwSound);
@@ -328,6 +345,286 @@ local function GetCharZone()
 	return '\aw[\ao' .. Module.CharLoaded .. '\aw] [\at' .. Zone.ShortName() .. '\aw] '
 end
 
+function Module:OpenDB()
+	local db = Module.SQLite3.open(Module.DBPath)
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return nil
+	end
+	if db then
+		db:busy_timeout(2000)
+	end
+	return db
+end
+
+function Module.LoadSpawnsDB()
+	if not Module.Utils.File.Exists(Module.DBPath) then
+		-- Create the database and its table if it doesn't exist
+		Module.Utils.PrintOutput('MyUI', nil, "Creating the AlertMaster Database")
+		local db = Module.SQLite3.open(Module.DBPath)
+		db:exec("PRAGMA journal_mode=WAL;")
+		db:exec("BEGIN TRANSACTION")
+		db:exec [[
+CREATE TABLE IF NOT EXISTS npc_spawns (
+"zone_short" TEXT NOT NULL,
+"spawn_name" TEXT NOT NULL,
+"id" INTEGER PRIMARY KEY AUTOINCREMENT
+
+);
+]]
+		db:exec [[
+CREATE TABLE IF NOT EXISTS pc_ignore (
+"pc_name" TEXT NOT NULL UNIQUE,
+"id" INTEGER PRIMARY KEY AUTOINCREMENT
+);
+]]
+		db:exec [[
+CREATE TABLE IF NOT EXISTS safe_zones (
+"zone_short" TEXT NOT NULL UNIQUE,
+"id" INTEGER PRIMARY KEY AUTOINCREMENT
+);
+]]
+		db:exec("COMMIT")
+		db:exec("PRAGMA wal_checkpoint;")
+
+		-- import existing settings and spawns lists
+		db:exec("BEGIN TRANSACTION")
+		for zone, spawn in pairs(settings) do
+			if type(spawn) == 'table' and zone ~= 'SafeZones' and zone ~= 'Ignore' and not zone:find("^Char_") then
+				for key, spawnName in pairs(spawn) do
+					if key:find("Spawn") then
+						local stmt = db:prepare("INSERT INTO npc_spawns (zone_short, spawn_name) VALUES (?, ?);")
+						stmt:bind_values(zone, spawnName)
+						stmt:step()
+						stmt:finalize()
+					end
+				end
+			end
+		end
+		for _, pcName in pairs(settings.Ignore or {}) do
+			local stmt = db:prepare("INSERT INTO pc_ignore (pc_name) VALUES (?);")
+			stmt:bind_values(pcName)
+			stmt:step()
+			stmt:finalize()
+		end
+		for _, zoneShort in pairs(settings.SafeZones or {}) do
+			local stmt = db:prepare("INSERT INTO safe_zones (zone_short) VALUES (?);")
+			stmt:bind_values(zoneShort)
+			stmt:step()
+			stmt:finalize()
+		end
+		db:exec("COMMIT")
+		db:exec("PRAGMA wal_checkpoint;")
+		db:close()
+	end
+end
+
+--- Retrieve the spawns list for the current zone and return a table
+---@param zoneShort any
+function Module:GetSpawns(zoneShort, db)
+	if zoneShort == nil then zoneShort = Zone.ShortName() end
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return {}
+	end
+
+	local WatchedSpawns = {}
+	local qry = string.format("SELECT spawn_name FROM npc_spawns WHERE zone_short = '%s'", zoneShort)
+	local stmt, err = db:prepare(qry)
+	if not stmt then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to prepare SQL statement: " .. err)
+		return {}
+	end
+	for row in stmt:nrows() do
+		if row.spawn_name and row.spawn_name ~= "" then
+			table.insert(WatchedSpawns, row.spawn_name)
+		end
+	end
+
+	stmt:finalize()
+	return WatchedSpawns
+end
+
+function Module:GetIgnoredPlayers(db)
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return {}
+	end
+
+	local ignoredPlayers = {}
+	local stmt, err = db:prepare("SELECT pc_name FROM pc_ignore")
+	if not stmt then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to prepare SQL statement: " .. err)
+		return {}
+	end
+
+	for row in stmt:nrows() do
+		if row.pc_name and row.pc_name ~= "" then
+			table.insert(ignoredPlayers, row.pc_name)
+		end
+	end
+
+	stmt:finalize()
+	return ignoredPlayers
+end
+
+function Module:GetSafeZones(db)
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return {}
+	end
+
+	local safeZones = {}
+	local stmt, err = db:prepare("SELECT * FROM safe_zones")
+
+	if not stmt then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to prepare SQL statement: " .. err)
+		return {}
+	end
+
+	for row in stmt:nrows() do
+		if row.zone_short and row.zone_short ~= "" then
+			table.insert(safeZones, row.zone_short)
+		end
+	end
+
+	stmt:finalize()
+	return safeZones
+end
+
+function Module:AddSafeZone(zoneShort)
+	local db = self:OpenDB()
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return false
+	end
+	-- check for exiting
+	local existingStmt, errCheck = db:prepare("SELECT zone_short FROM safe_zones WHERE zone_short = ?")
+	if not existingStmt then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to prepare SQL statement: " .. errCheck)
+		db:close()
+		return false
+	end
+	existingStmt:bind_values(zoneShort)
+	local exists = existingStmt:step() == Module.SQLite3.ROW
+	existingStmt:finalize()
+	if exists then
+		db:close()
+		return false
+	end
+
+	-- skip conflicts
+	local qry = string.format("INSERT OR IGNORE INTO safe_zones (zone_short) VALUES ('%s')", zoneShort)
+	local stmt, err = db:prepare(qry)
+	if not stmt then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to prepare SQL statement: " .. err)
+		db:close()
+		return false
+	end
+	local result = stmt:step()
+	stmt:finalize()
+	if db then db:close() end
+	return result == Module.SQLite3.DONE
+end
+
+function Module:AddIgnorePCtoDB(pcName)
+	local db = self:OpenDB()
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return false
+	end
+	-- check for existing entry
+	local existingStmt = db:prepare("SELECT pc_name FROM pc_ignore WHERE pc_name = ?")
+	existingStmt:bind_values(pcName)
+	local exists = existingStmt:step() == Module.SQLite3.ROW
+	existingStmt:finalize()
+	if exists then
+		db:close()
+		return false
+	end
+
+	-- skip conflicts
+	local stmt = db:prepare("INSERT OR IGNORE INTO pc_ignore (pc_name) VALUES (?)")
+	stmt:bind_values(pcName)
+	local result = stmt:step()
+	stmt:finalize()
+	if db then db:close() end
+	return result == Module.SQLite3.DONE
+end
+
+function Module:RemoveSafeZone(zoneShort)
+	local db = self:OpenDB()
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return false
+	end
+
+	local stmt = db:prepare("DELETE FROM safe_zones WHERE zone_short = ?")
+	stmt:bind_values(zoneShort)
+	local result = stmt:step()
+	stmt:finalize()
+	if db then db:close() end
+	return result == Module.SQLite3.DONE
+end
+
+function Module:RemoveIgnoredPC(pcName)
+	local db = self:OpenDB()
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return false
+	end
+
+	local stmt = db:prepare("DELETE FROM pc_ignore WHERE pc_name = ?")
+	stmt:bind_values(pcName)
+	local result = stmt:step()
+	stmt:finalize()
+	if db then db:close() end
+	return result == Module.SQLite3.DONE
+end
+
+function Module:AddSpawnToDB(zoneShort, spawnName)
+	local db = self:OpenDB()
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return false
+	end
+
+	-- check for existing entry
+	local existingStmt = db:prepare("SELECT zone_short FROM npc_spawns WHERE zone_short = ? AND spawn_name = ?")
+	existingStmt:bind_values(zoneShort, spawnName)
+	local exists = existingStmt:step() == Module.SQLite3.ROW
+	existingStmt:finalize()
+	if exists then
+		db:close()
+		return false
+	end
+
+	-- skip conflicts
+	db:exec("BEGIN TRANSACTION")
+	local stmt = db:prepare("INSERT OR IGNORE INTO npc_spawns (zone_short, spawn_name) VALUES (?, ?)")
+	stmt:bind_values(zoneShort, spawnName)
+	local result = stmt:step()
+	stmt:finalize()
+	db:exec("COMMIT")
+	if db then db:close() end
+	return result == Module.SQLite3.DONE
+end
+
+function Module:DeleteSpawnFromDB(zoneShort, spawnName)
+	local db = self:OpenDB()
+	if not db then
+		Module.Utils.PrintOutput('MyUI', nil, "Failed to open the AlertMaster Database")
+		return false
+	end
+
+	local stmt = db:prepare("DELETE FROM npc_spawns WHERE zone_short = ? AND spawn_name = ?")
+	stmt:bind_values(zoneShort, spawnName)
+	local result = stmt:step()
+	stmt:finalize()
+	if db then db:close() end
+	return result == Module.SQLite3.DONE
+end
+
 local function print_status()
 	Module.Utils.PrintOutput('AlertMaster', nil, '\ayAlert Status: ' .. tostring(active and 'on' or 'off'))
 	Module.Utils.PrintOutput('AlertMaster', nil, '\a-tPCs: \a-y' ..
@@ -352,12 +649,19 @@ local function print_status()
 end
 
 local function save_settings()
-	LIP.save(settings_path, settings)
+	-- LIP.save(settings_path, settings)
 	mq.pickle(newConfigFile, Module.Settings)
 end
 
+---comment
+---@return boolean
 local function check_safe_zone()
-	return tSafeZones[Zone.ShortName()]
+	return settings.SafeZones[Zone.ShortName()] ~= nil
+end
+
+function Module:UpdateIgnoredPlayers()
+	settings.Ignore = {}
+	settings.Ignore = Module:GetIgnoredPlayers()
 end
 
 local function import_spawnmaster(val)
@@ -366,22 +670,34 @@ local function import_spawnmaster(val)
 	if zoneShort ~= nil then
 		local flag = true -- assume we are adding a new spawn
 		local count = 0
-		if settings[zoneShort] == nil then settings[zoneShort] = {} end
-		-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
-		for k, v in pairs(settings[zoneShort]) do
-			if string.find(v, val_str) then
+		-- if settings[zoneShort] == nil then settings[zoneShort] = {} end
+		-- -- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
+		-- for k, v in pairs(settings[zoneShort]) do
+		-- 	if string.find(v, val_str) then
+		-- 		flag = false
+		-- 	end
+		-- 	if flag then
+		-- 		count = count + 1
+		-- 	end
+		-- end
+		for _, v in ipairs(Module.TempSettings.NpcList) do
+			if v == val_str then
 				flag = false
-			end
-			if flag then
-				count = count + 1
+				break
 			end
 		end
 
+
 		importedZones[zoneShort] = true
+		mq.pickle(smImportList, importedZones)
 		-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
 		if flag then
-			settings[zoneShort]['Spawn' .. count + 1] = val_str
-			save_settings()
+			-- settings[zoneShort]['Spawn' .. count + 1] = val_str
+			-- save_settings()
+			local result = Module:AddSpawnToList(val_str)
+			if result then
+				count = count + 1
+			end
 		end
 		return flag
 	end
@@ -451,6 +767,25 @@ local function set_settings()
 	Module.Settings[CharConfig]['doSoundPCEntered'] = doSoundPCEntered
 end
 
+local amActor = nil
+function Module:MessageHandler()
+	amActor = Module.Actors.register('alertmaster', function(message)
+		if not message() then return end
+		local messageData = message()
+		local subject     = messageData.Subject or 'Hello'
+		local who         = messageData.Name
+		local zone        = messageData.Zone or 'Unknown'
+		local replyTo     = messageData.ReplyTo or Module.ActorMailBox
+		printf("AlertMaster MessageHandler received subject: %s from %s in zone %s replyTo: %s", subject, who, zone, replyTo)
+		if subject == 'GetNamed' and zone ~= 'Unknown' then
+			Module.TempSettings.SendNamed = true
+			Module.TempSettings.NamedZone = zone
+			Module.TempSettings.ReplyTo = replyTo
+			return
+		end
+	end)
+end
+
 local function load_settings()
 	local check = false
 	if Module.Utils.File.Exists(newConfigFile) then
@@ -463,16 +798,16 @@ local function load_settings()
 		Module.Settings[CharConfig] = defaultConfig
 	end
 
-	if Module.Utils.File.Exists(settings_path) then
+	if Module.Utils.File.Exists(settings_path) and not check then
 		settings = LIP.load(settings_path)
 		if not check then
 			Module.Settings[CharConfig] = settings[CharConfig] or defaultConfig
 			Module.Settings[CharCommands] = settings[CharCommands] or {}
 			settings[CharConfig] = nil
 			settings[CharCommands] = nil
-			save_settings()
 		end
-	else
+		save_settings()
+	elseif not Module.Utils.File.Exists(settings_path) and not check then
 		settings = {
 			Ignore = {},
 		}
@@ -485,11 +820,12 @@ local function load_settings()
 		end
 	end
 
-	if Module.Utils.File.Exists(newSMFile) then
-		spawnsSpawnMaster = LIP.loadSM(newSMFile)
-		haveSM = true
-		importZone = true
-	elseif Module.Utils.File.Exists(smSettings) then
+	-- if Module.Utils.File.Exists(newSMFile) then
+	-- 	spawnsSpawnMaster = LIP.loadSM(newSMFile)
+	-- 	haveSM = true
+	-- 	importZone = true
+	-- else
+	if Module.Utils.File.Exists(smSettings) then
 		spawnsSpawnMaster = LIP.loadSM(smSettings)
 		haveSM = true
 		importZone = true
@@ -500,7 +836,7 @@ local function load_settings()
 				spawnsSpawnMaster[section] = nil
 			end
 		end
-		LIP.save(newSMFile, spawnsSpawnMaster)
+		-- LIP.save(newSMFile, spawnsSpawnMaster)
 	end
 	local exportFile = string.format("%s/MyUI/ExportSM.lua", mq.configDir)
 	mq.pickle(exportFile, spawnsSpawnMaster)
@@ -508,14 +844,19 @@ local function load_settings()
 	if Module.Utils.File.Exists(smImportList) then
 		importedZones = dofile(smImportList)
 	end
+	Module.LoadSpawnsDB()
 
 	useThemeName = Module.Theme.LoadTheme
 	-- if this character doesn't have the sections in the ini, create them
 	if Module.Settings[CharConfig] == nil then Module.Settings[CharConfig] = defaultConfig end
 	if Module.Settings[CharCommands] == nil then Module.Settings[CharCommands] = {} end
-	if settings['SafeZones'] == nil then settings['SafeZones'] = {} end
+	local db = Module:OpenDB()
+	settings.SafeZones = Module:GetSafeZones(db)
+	settings.Ignore = Module:GetIgnoredPlayers(db)
+	if db then db:close() end
 	set_settings()
 	save_settings()
+
 	if Module.GUI_Main.Locked then
 		SearchWindow_Show = true
 		SearchWindowOpen = true
@@ -524,7 +865,7 @@ local function load_settings()
 		SearchWindowOpen = false
 	end
 	-- setup safe zone "set"
-	for k, v in pairs(settings['SafeZones']) do tSafeZones[v] = true end
+	for _, v in ipairs(settings['SafeZones']) do tSafeZones[v] = true end
 end
 
 local function ColorDistance(distance)
@@ -551,11 +892,14 @@ end
 
 ---@param spawn MQSpawn
 local function SpawnToEntry(spawn, id, table)
+	if not spawn then return end
 	local pAggro = 0
 	if table == xTarTable then
 		pAggro = spawn.PctAggro() or 0
 	end
 	if spawn.ID() then
+		local surName = spawn.Surname() or ''
+		if surName:find("'s ") then return end
 		local entry = {
 			ID = id or 0,
 			MobName = spawn.DisplayName() or ' ',
@@ -679,9 +1023,9 @@ local function AlertTableSortSpecs(a, b)
 			end
 		elseif spec.ColumnUserID == Module.GUI_Alert.Table.Column_ID.MobDist then
 			if a.MobDist and b.MobDist then
-				if math.floor(spawnA.Distance()) < math.floor(spawnB.Distance()) then
+				if math.floor(spawnA.Distance() or 0) < math.floor(spawnB.Distance() or 0) then
 					delta = -1
-				elseif math.floor(spawnA.Distance()) > math.floor(spawnB.Distance()) then
+				elseif math.floor(spawnA.Distance() or 0) > math.floor(spawnB.Distance() or 0) then
 					delta = 1
 				end
 			else
@@ -743,12 +1087,16 @@ local function RefreshZone()
 	local npcs = mq.getFilteredSpawns(function(spawn) return spawn.Type() == 'NPC' end)
 	for i = 1, #npcs do
 		local spawn = npcs[i]
-		if #npcs > 0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
+		if spawn() then
+			if #npcs > 0 then InsertTableSpawn(newTable, spawn, tonumber(spawn.ID())) end
+		end
 	end
 	for i = 1, mq.TLO.Me.XTargetSlots() do
 		if mq.TLO.Me.XTarget(i)() ~= nil and mq.TLO.Me.XTarget(i)() ~= 0 then
 			local spawn = mq.TLO.Me.XTarget(i)
-			if spawn.ID() > 0 then InsertTableSpawn(xTarTable, spawn, tonumber(spawn.ID())) end
+			if spawn() then
+				if spawn.ID() > 0 then InsertTableSpawn(xTarTable, spawn, tonumber(spawn.ID())) end
+			end
 		end
 	end
 	if showAggro then
@@ -778,8 +1126,8 @@ local function should_include_player(spawn)
 	local guild = spawn.Guild() or 'None'
 	-- if pc exists on the ignore list, skip
 	if settings['Ignore'] ~= nil then
-		for k, v in pairs(settings['Ignore']) do
-			if v == name then return false end
+		for k, v in pairs(settings['Ignore'] or {}) do
+			if v == nil or v == name then return false end
 		end
 	end
 	-- if pc is in group, raid or (optionally) guild, skip
@@ -807,27 +1155,51 @@ local function spawn_search_players(search)
 		for i = 1, cnt do
 			local pc = NearestSpawn(i, search)
 			if pc ~= nil and pc.DisplayName() ~= nil then
-				local name = pc.DisplayName()
+				local name = pc.DisplayName() or 'unknown'
 				local guild = pc.Guild() or 'No Guild'
 				if should_include_player(pc) then
 					tmp[name] = {
 						name = (pc.GM() and '\ag*GM*\ax ' or '') .. '\ar' .. name .. '\ax',
+						tblName = name,
+						level = pc.Level() or 0,
 						guild = '<\ay' .. guild .. '\ax>',
+						tblGuild = guild,
 						distance = math.floor(pc.Distance() or 0),
 						time = os.time(),
+						isGM = pc.GM() or false,
 					}
 				end
 			end
 		end
 	end
+	for name, v in pairs(tmp) do
+		if displayTablePlayers[name] == nil then
+			displayTablePlayers[name] = v
+			numDisplayPlayers = numDisplayPlayers + 1
+		else
+			displayTablePlayers[name].distance = v.distance
+			displayTablePlayers[name].time = v.time
+		end
+	end
+	if search ~= 'gm' then
+		for k, v in pairs(displayTablePlayers) do
+			if tmp[k] == nil then
+				displayTablePlayers[k] = nil
+				numDisplayPlayers = numDisplayPlayers - 1
+			end
+		end
+	end
+
 	return tmp
 end
 
 local function spawn_search_npcs()
 	local tmp = {}
-	local spawns = settings[Zone.ShortName()]
-	if spawns ~= nil then
-		for k, v in pairs(spawns) do
+	local db = Module:OpenDB()
+	local tmpSpawns = Module:GetSpawns(Zone.ShortName(), db)
+	if db then db:close() end
+	if tmpSpawns ~= nil then
+		for k, v in pairs(tmpSpawns) do
 			local search = 'npc ' .. v
 			local cnt = SpawnCount(search)()
 			for i = 1, cnt do
@@ -846,8 +1218,8 @@ local function spawn_search_npcs()
 end
 
 local function check_for_gms()
-	if active and gms then
-		local tmp = spawn_search_players('gm')
+	local tmp = spawn_search_players('gm')
+	if active and gms and not check_safe_zone() then
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
 				if tGMs[name] == nil then
@@ -879,8 +1251,8 @@ local function check_for_gms()
 end
 
 local function check_for_pcs()
-	if active and pcs then
-		local tmp = spawn_search_players('pc radius ' .. radius .. ' zradius ' .. zradius .. ' notid ' .. mq.TLO.Me.ID())
+	local tmp = spawn_search_players('pc radius ' .. radius .. ' zradius ' .. zradius .. ' notid ' .. mq.TLO.Me.ID())
+	if active and pcs and not check_safe_zone() then
 		local charZone = '\aw[\a-o' .. Module.CharLoaded .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
@@ -916,27 +1288,31 @@ local function check_for_pcs()
 end
 
 local function check_for_spawns()
-	if active and spawns then
+	if active then
 		local spawnAlertsUpdated, tableUpdate = false, false
-		local charZone = '\aw[\a-o' .. Module.CharLoaded .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
 		if haveSM and (importZone or forceImport) then
 			local counter = 0
 			local tmpSpawnMaster = {}
 
 			if not importedZones[Zone.ShortName()] or forceImport then
+				local zoneShort = Zone.ShortName()
 				-- Check for Long Name
 				local tmpFixName = Zone.Name():gsub("the ", ""):lower()
-				if spawnsSpawnMaster[Zone.Name():lower()] ~= nil or spawnsSpawnMaster[tmpFixName] ~= nil then
-					tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()] ~= nil and spawnsSpawnMaster[Zone.Name():lower()] or spawnsSpawnMaster[tmpFixName]
-					for k, v in pairs(tmpSpawnMaster) do
-						if import_spawnmaster(v) then
-							counter = counter + 1
-						end
+				if spawnsSpawnMaster[Zone.Name():lower()] ~= nil then
+					tmpSpawnMaster = spawnsSpawnMaster[Zone.Name():lower()]
+				elseif spawnsSpawnMaster[Module.ZoneList[zoneShort]] ~= nil then
+					tmpSpawnMaster = spawnsSpawnMaster[Module.ZoneList[zoneShort]]
+				elseif spawnsSpawnMaster[tmpFixName] ~= nil then
+					tmpSpawnMaster = spawnsSpawnMaster[tmpFixName]
+				end
+				for k, v in pairs(tmpSpawnMaster) do
+					if import_spawnmaster(v) then
+						counter = counter + 1
 					end
 				end
 				-- Check for Short Name
-				if spawnsSpawnMaster[Zone.ShortName()] ~= nil then
-					tmpSpawnMaster = spawnsSpawnMaster[Zone.ShortName()]
+				if spawnsSpawnMaster[zoneShort] ~= nil then
+					tmpSpawnMaster = spawnsSpawnMaster[zoneShort]
 					for k, v in pairs(tmpSpawnMaster) do
 						if import_spawnmaster(v) then
 							counter = counter + 1
@@ -950,7 +1326,7 @@ local function check_for_spawns()
 			end
 		end
 		local tmp = spawn_search_npcs()
-		if tmp ~= nil then
+		if tmp ~= nil and spawns then
 			for id, v in pairs(tmp) do
 				if tSpawns[id] == nil then
 					if check_safe_zone() ~= true then
@@ -1011,8 +1387,9 @@ local function check_for_spawns()
 end
 
 local function check_for_announce()
-	if active and announce then
-		local tmp = spawn_search_players('pc notid ' .. mq.TLO.Me.ID())
+	local tmp = spawn_search_players('pc notid ' .. mq.TLO.Me.ID())
+
+	if active and announce and not check_safe_zone() then
 		local charZone = '\aw[\a-o' .. Module.CharLoaded .. '\aw|\at' .. Zone.ShortName() .. '\aw] '
 		if tmp ~= nil then
 			for name, v in pairs(tmp) do
@@ -1049,8 +1426,12 @@ local function check_for_zone_change()
 		zone_id = Zone.ID()
 		alertTime = os.time()
 		doOnce = true
+		displayTablePlayers = {}
+		numDisplayPlayers = 0
 		if haveSM then importZone = true end
+		return true
 	end
+	return false
 end
 -------- GUI STUFF ------------
 
@@ -1112,6 +1493,9 @@ function DrawArrow(topPoint, width, height, color)
 end
 
 ----------------------------
+---
+---
+---
 
 local function DrawToggles()
 	local lockedIcon = Module.GUI_Main.Locked and Module.Icons.FA_LOCK .. '##lockTabButton' or
@@ -1195,7 +1579,8 @@ local function DrawToggles()
 	-- Button to add the new spawn
 	if ImGui.SmallButton(Module.Icons.FA_HASHTAG) then
 		mq.cmdf('/alertmaster spawnadd ${Target}')
-		npcs = settings[Zone.ShortName()] or {}
+		-- npcs = settings[Zone.ShortName()] or {}
+		-- npcs = Module:GetSpawns(Zone.ShortName())
 	end
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
@@ -1207,7 +1592,8 @@ local function DrawToggles()
 	-- Button to add the new spawn
 	if ImGui.SmallButton(Module.Icons.FA_BULLSEYE) then
 		mq.cmdf('/alertmaster spawnadd "${Target.DisplayName}"')
-		npcs = settings[Zone.ShortName()] or {}
+		-- npcs = settings[Zone.ShortName()] or {}
+		-- npcs = Module:GetSpawns(Zone.ShortName())
 	end
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
@@ -1282,22 +1668,31 @@ local function DrawToggles()
 	end
 end
 
-local function addSpawnToList(name)
+function Module:AddSpawnToList(name)
+	if name == nil then return end
+
 	local sCount = 0
 	local zone = Zone.ShortName()
-	if settings[zone] == nil then settings[zone] = {} end
-
-	-- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
-	for k, v in pairs(settings[zone]) do
-		if settings[zone][k] == name then
-			Module.Utils.PrintOutput('AlertMaster', nil, "\aySpawn alert \"" .. name .. "\" already exists.")
-			return
-		end
-		sCount = sCount + 1
+	local result = Module:AddSpawnToDB(zone, name)
+	if result == false then
+		Module.Utils.PrintOutput('AlertMaster', nil, "\aySpawn alert \"" .. name .. "\" already exists.")
+		return
 	end
-	-- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
-	settings[zone]['Spawn' .. sCount + 1] = name
-	save_settings()
+	-- if settings[zone] == nil then settings[zone] = {} end
+	-- -- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
+	-- for k, v in pairs(settings[zone]) do
+	-- 	if settings[zone][k] == name then
+	-- 		Module.Utils.PrintOutput('AlertMaster', nil, "\aySpawn alert \"" .. name .. "\" already exists.")
+	-- 		return
+	-- 	end
+	-- 	sCount = sCount + 1
+	-- end
+	-- -- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
+	-- settings[zone]['Spawn' .. sCount + 1] = name
+	-- save_settings()
+	local db = Module:OpenDB()
+	Module.TempSettings.NpcList = Module:GetSpawns(Zone.ShortName(), db)
+	if db then db:close() end
 	Module.Utils.PrintOutput('AlertMaster', nil, '\ayAdded spawn alert for ' .. name .. ' in ' .. zone)
 end
 
@@ -1306,15 +1701,23 @@ local function DrawRuleRow(entry)
 	if not spawn() then return end
 	ImGui.TableNextColumn()
 	-- Add to Spawn List Button
-	if ImGui.SmallButton(Module.Icons.FA_USER_PLUS) then addSpawnToList(entry.MobName) end
+	if ImGui.SmallButton(Module.Icons.FA_USER_PLUS) then Module:AddSpawnToList(entry.MobName) end
 	if ImGui.IsItemHovered() and showTooltips then
 		ImGui.BeginTooltip()
 		ImGui.Text("Add to Spawn List")
 		ImGui.EndTooltip()
 	end
 	ImGui.TableNextColumn()
+
 	-- Mob Name
+	if spawnAlerts[entry.MobID] == nil then
+		ImGui.PushStyleColor(ImGuiCol.Text, Module.Colors.color('white'))
+	else
+		ImGui.PushStyleColor(ImGuiCol.Text, Module.Colors.color('green'))
+	end
 	ImGui.Text('%s', entry.MobName)
+	ImGui.PopStyleColor()
+
 	-- Right-click interaction uses the original spawnName
 	if ImGui.IsItemHovered() then
 		if showTooltips then
@@ -1371,6 +1774,62 @@ local function DrawRuleRow(entry)
 	ImGui.TableNextColumn()
 end
 
+function Module:DrawSafeZoneConfig()
+	ImGui.Text("Safe Zones:")
+	Module.TempSettings.NewSafeZone = Module.TempSettings.NewSafeZone or ""
+	local changed = false
+	Module.TempSettings.NewSafeZone, changed = ImGui.InputTextWithHint("Add Safe Zone##SafeZoneInput", "Zone ShortName and Press ENTER", Module.TempSettings.NewSafeZone,
+		ImGuiInputTextFlags.EnterReturnsTrue)
+	if changed then
+		Module:AddSafeZone(Module.TempSettings.NewSafeZone)
+		Module.TempSettings.NewSafeZone = ""
+	end
+	ImGui.Separator()
+	if ImGui.BeginTable("SafeZoneTable##SafeZoneTable", 2, ImGuiTableFlags.Borders) then
+		ImGui.TableSetupColumn("Zone Name", ImGuiTableColumnFlags.WidthStretch)
+		ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 100)
+		ImGui.TableHeadersRow()
+		for i, zone in ipairs(settings['SafeZones'] or {}) do
+			ImGui.TableNextRow()
+			ImGui.TableNextColumn()
+			ImGui.Text(zone)
+			ImGui.TableNextColumn()
+			if ImGui.SmallButton("Delete##SafeZoneDelete" .. i) then
+				Module:RemoveSafeZone(zone)
+			end
+		end
+		ImGui.EndTable()
+	end
+end
+
+function Module:DrawIgnoredPlayersConfig()
+	ImGui.Text("Ignored Players:")
+	Module.TempSettings.NewIgnoredPlayer = Module.TempSettings.NewIgnoredPlayer or ""
+	local changed = false
+	Module.TempSettings.NewIgnoredPlayer, changed = ImGui.InputText("Add Ignored Player##IgnoredPlayerInput", Module.TempSettings.NewIgnoredPlayer,
+		ImGuiInputTextFlags.EnterReturnsTrue)
+	if changed then
+		Module:AddIgnorePCtoDB(Module.TempSettings.NewIgnoredPlayer)
+		Module.TempSettings.NewIgnoredPlayer = ""
+	end
+	ImGui.Separator()
+	if ImGui.BeginTable("IgnoredPlayersTable##IgnoredPlayersTable", 2, ImGuiTableFlags.Borders) then
+		ImGui.TableSetupColumn("Player Name", ImGuiTableColumnFlags.WidthStretch)
+		ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 100)
+		ImGui.TableHeadersRow()
+		for i, player in ipairs(settings['Ignore'] or {}) do
+			ImGui.TableNextRow()
+			ImGui.TableNextColumn()
+			ImGui.Text(player)
+			ImGui.TableNextColumn()
+			if ImGui.SmallButton("Delete##IgnoredPlayerDelete" .. i) then
+				Module:RemoveIgnoredPC(player)
+			end
+		end
+		ImGui.EndTable()
+	end
+end
+
 local function DrawAlertRuleRow(entry)
 	local sHeadingTo = entry.MobDirection
 	local spawn = mq.TLO.Spawn(entry.MobID)
@@ -1410,6 +1869,9 @@ local function DrawAlertRuleRow(entry)
 	--end
 end
 local btnIconDel = Module.Icons.MD_DELETE
+
+Module.TempSettings = {}
+Module.TempSettings.NpcList = {}
 local function DrawSearchWindow()
 	if currZone ~= lastZone then return end
 	if Module.GUI_Main.Locked then
@@ -1463,64 +1925,110 @@ local function DrawSearchWindow()
 			end
 
 			if currentTab == "zone" then
-				local searchText, selected = ImGui.InputText("Search##RulesSearch", Module.GUI_Main.Search)
-				-- ImGui.PopItemWidth()
-				if selected and Module.GUI_Main.Search ~= searchText then
-					Module.GUI_Main.Search = searchText
-					Module.GUI_Main.Refresh.Sort.Rules = true
-					Module.GUI_Main.Refresh.Table.Unhandled = true
-				end
-				ImGui.SameLine()
-				if ImGui.Button("Clear##ClearRulesSearch") then
-					Module.GUI_Main.Search = ''
-					Module.GUI_Main.Refresh.Sort.Rules = false
-					Module.GUI_Main.Refresh.Table.Unhandled = true
-				end
-				ImGui.Separator()
-				local sizeX = ImGui.GetContentRegionAvail() - 4
-				ImGui.SetWindowFontScale(ZoomLvl)
-				if ImGui.BeginTable('##RulesTable', 8, Module.GUI_Main.Table.Flags) then
-					ImGui.TableSetupScrollFreeze(0, 1)
-					ImGui.TableSetupColumn(Module.Icons.FA_USER_PLUS, bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 15, Module.GUI_Main.Table.Column_ID
-						.Remove)
-					ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 120, Module.GUI_Main.Table.Column_ID.MobName)
-					ImGui.TableSetupColumn("Lvl", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobLvl)
-					ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 40, Module.GUI_Main.Table.Column_ID.MobDist)
-					ImGui.TableSetupColumn("Aggro", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobAggro)
-					ImGui.TableSetupColumn("ID", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobID)
-					ImGui.TableSetupColumn("Loc", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 90, Module.GUI_Main.Table.Column_ID.MobLoc)
-					ImGui.TableSetupColumn(Module.Icons.FA_COMPASS, bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.WidthFixed), 15,
-						Module.GUI_Main.Table.Column_ID.MobDirection)
-					ImGui.TableHeadersRow()
-					local sortSpecs = ImGui.TableGetSortSpecs()
-
-					if sortSpecs and (sortSpecs.SpecsDirty or Module.GUI_Main.Refresh.Sort.Rules) then
-						if #Table_Cache.Unhandled > 0 then
-							Module.GUI_Main.Table.SortSpecs = sortSpecs
-							table.sort(Table_Cache.Unhandled, TableSortSpecs)
-							Module.GUI_Main.Table.SortSpecs = nil
+				if ImGui.BeginTabBar(string.format("Spawns##Tabs")) then
+					if ImGui.BeginTabItem(string.format("NPC's (%s)###NpcTabLabel", (#Table_Cache.Unhandled or 0))) then
+						local searchText, selected = ImGui.InputText("Search##RulesSearch", Module.GUI_Main.Search)
+						-- ImGui.PopItemWidth()
+						if selected and Module.GUI_Main.Search ~= searchText then
+							Module.GUI_Main.Search = searchText
+							Module.GUI_Main.Refresh.Sort.Rules = true
+							Module.GUI_Main.Refresh.Table.Unhandled = true
 						end
-						sortSpecs.SpecsDirty = false
-						Module.GUI_Main.Refresh.Sort.Rules = false
-					end
-					local clipper = ImGuiListClipper.new()
-					clipper:Begin(#Table_Cache.Unhandled)
-					while clipper:Step() do
-						for i = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do
-							local entry = Table_Cache.Unhandled[i + 1]
-							ImGui.PushID(entry.ID)
-							ImGui.TableNextRow()
-							DrawRuleRow(entry)
-							ImGui.PopID()
+						ImGui.SameLine()
+						if ImGui.Button("Clear##ClearRulesSearch") then
+							Module.GUI_Main.Search = ''
+							Module.GUI_Main.Refresh.Sort.Rules = false
+							Module.GUI_Main.Refresh.Table.Unhandled = true
 						end
-					end
-					clipper:End()
+						ImGui.Separator()
+						local sizeX = ImGui.GetContentRegionAvail() - 4
+						ImGui.SetWindowFontScale(ZoomLvl)
+						if ImGui.BeginTable('##RulesTable', 8, Module.GUI_Main.Table.Flags) then
+							ImGui.TableSetupScrollFreeze(0, 1)
+							ImGui.TableSetupColumn(Module.Icons.FA_USER_PLUS, bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 15,
+								Module.GUI_Main.Table.Column_ID
+								.Remove)
+							ImGui.TableSetupColumn("Name", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 120,
+								Module.GUI_Main.Table.Column_ID.MobName)
+							ImGui.TableSetupColumn("Lvl", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobLvl)
+							ImGui.TableSetupColumn("Dist", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 40,
+								Module.GUI_Main.Table.Column_ID.MobDist)
+							ImGui.TableSetupColumn("Aggro", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30,
+								Module.GUI_Main.Table.Column_ID.MobAggro)
+							ImGui.TableSetupColumn("ID", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultSort), 30, Module.GUI_Main.Table.Column_ID.MobID)
+							ImGui.TableSetupColumn("Loc", bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.NoSort), 90, Module.GUI_Main.Table.Column_ID.MobLoc)
+							ImGui.TableSetupColumn(Module.Icons.FA_COMPASS, bit32.bor(ImGuiTableColumnFlags.NoResize, ImGuiTableColumnFlags.NoSort, ImGuiTableColumnFlags.WidthFixed),
+								15,
+								Module.GUI_Main.Table.Column_ID.MobDirection)
+							ImGui.TableHeadersRow()
+							local sortSpecs = ImGui.TableGetSortSpecs()
 
-					ImGui.EndTable()
+							if sortSpecs and (sortSpecs.SpecsDirty or Module.GUI_Main.Refresh.Sort.Rules) then
+								if #Table_Cache.Unhandled > 0 then
+									Module.GUI_Main.Table.SortSpecs = sortSpecs
+									table.sort(Table_Cache.Unhandled, TableSortSpecs)
+									Module.GUI_Main.Table.SortSpecs = nil
+								end
+								sortSpecs.SpecsDirty = false
+								Module.GUI_Main.Refresh.Sort.Rules = false
+							end
+							local clipper = ImGuiListClipper.new()
+							clipper:Begin(#Table_Cache.Unhandled)
+							while clipper:Step() do
+								for i = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do
+									local entry = Table_Cache.Unhandled[i + 1]
+									ImGui.PushID(entry.ID)
+									ImGui.TableNextRow()
+									DrawRuleRow(entry)
+									ImGui.PopID()
+								end
+							end
+							clipper:End()
+
+							ImGui.EndTable()
+						end
+
+						ImGui.EndTabItem()
+					end
+
+					-- Players
+					if ImGui.BeginTabItem(string.format("Players (%s)###PCTabLabel", numDisplayPlayers)) then
+						if ImGui.BeginTable("PlayersInZone###PCTable", 4, Module.GUI_Main.Table.Flags) then
+							ImGui.TableSetupScrollFreeze(0, 1)
+							ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 120)
+							ImGui.TableSetupColumn("Guild", ImGuiTableColumnFlags.WidthFixed, 100)
+							ImGui.TableSetupColumn("Level", ImGuiTableColumnFlags.WidthFixed, 50)
+							ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthFixed, 70)
+							ImGui.TableHeadersRow()
+							for _, player in pairs(displayTablePlayers or {}) do
+								ImGui.TableNextRow()
+								ImGui.TableNextColumn()
+								ImGui.TextColored(ImVec4(0, 1, 1, 1), player.tblName or "N/A")
+								ImGui.TableNextColumn()
+								ImGui.TextColored(ImVec4(1, 1, 0, 1), player.tblGuild or "N/A")
+								ImGui.TableNextColumn()
+								ImGui.Text("%s", player.level or "N/A")
+								ImGui.TableNextColumn()
+								ImGui.Text("%0.1f", player.distance or 9999)
+							end
+
+							ImGui.EndTable()
+						end
+						ImGui.EndTabItem()
+					end
+
+
+					ImGui.EndTabBar()
 				end
 			elseif currentTab == "npcList" then
 				-- Tab for NPC List
-				local npcs = settings[Zone.ShortName()] or {}
+				-- local tmpNPCs = settings[Zone.ShortName()] or {}
+				if #Module.TempSettings.NpcList == 0 then
+					local db = Module:OpenDB()
+					Module.TempSettings.NpcList = Module:GetSpawns(Zone.ShortName(), db)
+					if db then db:close() end
+				end
+
 				local changed
 				ImGui.SetNextItemWidth(160)
 				newSpawnName, changed = ImGui.InputText("##NewSpawnName", newSpawnName, 256)
@@ -1533,9 +2041,8 @@ local function DrawSearchWindow()
 				-- Button to add the new spawn
 				if ImGui.Button(Module.Icons.FA_USER_PLUS) and newSpawnName ~= "" then
 					-- CMD('/alertmaster spawnadd "'..newSpawnName..'"')
-					addSpawnToList(newSpawnName)
+					Module:AddSpawnToList(newSpawnName)
 					newSpawnName = "" -- Clear the input text after adding
-					npcs = settings[Zone.ShortName()] or {}
 				end
 				if ImGui.IsItemHovered() and showTooltips then
 					ImGui.BeginTooltip()
@@ -1552,7 +2059,7 @@ local function DrawSearchWindow()
 				end
 				-- Populate and sort sortedNpcs right before using it
 				local sortedNpcs = {}
-				for id, spawnName in pairs(npcs) do
+				for id, spawnName in ipairs(Module.TempSettings.NpcList) do
 					table.insert(sortedNpcs, {
 						name = spawnName,
 						isInAlerts = isSpawnInAlerts(spawnName, spawnAlerts),
@@ -1917,6 +2424,14 @@ local function Config_GUI()
 			end
 		end
 
+		if ImGui.CollapsingHeader('Safe Zones##AlertMaster') then
+			Module:DrawSafeZoneConfig()
+		end
+
+		if ImGui.CollapsingHeader('Ignored Players##AlertMaster') then
+			Module:DrawIgnoredPlayersConfig()
+		end
+
 		if ImGui.Button('Save & Close') then
 			openConfigGUI = false
 			Module.Settings[CharConfig]['theme'] = useThemeName
@@ -2204,59 +2719,48 @@ local function load_binds()
 		local sCount = #tSpawns or 0
 		-- adding/removing/listing spawn alerts for current zone
 		if cmd == 'spawnadd' then
-			if val_str ~= nil and val_str ~= 'nil' then
-				val_str = mq.TLO.Target.DisplayName()
-			elseif mq.TLO.Target() ~= nil and mq.TLO.Target.Type() == 'NPC' then
-				val_str = mq.TLO.Target.DisplayName()
-			else
-				Module.Utils.PrintOutput('AlertMaster', true, "\arNO \aoSpawn supplied\aw or \agTarget")
-				return
+			if (val_str == nil or val_str == 'nil') then
+				if mq.TLO.Target() ~= nil and mq.TLO.Target.Type() == 'NPC' then
+					val_str = mq.TLO.Target.DisplayName()
+				else
+					Module.Utils.PrintOutput('AlertMaster', true, "\arNO \aoSpawn supplied\aw or \agTarget")
+					return
+				end
 			end
-			addSpawnToList(val_str)
-			-- -- if the zone doesn't exist in ini yet, create a new table
-			-- if settings[zone] == nil then settings[zone] = {} end
-
-			-- -- if the zone does exist in the ini, spin over entries and make sure we aren't duplicating
-			-- for k, v in pairs(settings[zone]) do
-			-- 	if settings[zone][k] == val_str then
-			-- 		Module.Utils.PrintOutput('AlertMaster',nil,"\aySpawn alert \""..val_str.."\" already exists.")
-			-- 		return
-			-- 	end
-			-- 	sCount = sCount + 1
-			-- end
-			-- -- if we made it this far, the spawn isn't tracked -- add it to the table and store to ini
-			-- settings[zone]['Spawn'..sCount+1] = val_str
-			-- save_settings()
-			-- Module.Utils.PrintOutput('AlertMaster',nil,'\ayAdded spawn alert for '..val_str..' in '..zone)
+			Module:AddSpawnToList(val_str)
 		elseif cmd == 'spawndel' and val_str:len() > 0 then
+			local db = Module:OpenDB()
+			Module:DeleteSpawnFromDB(zone, val_str)
+			Module.TempSettings.NpcList = Module:GetSpawns(Zone.ShortName(), db)
+			if db then db:close() end
 			-- Identify and remove the spawn from the ini
-			local found = false
-			for k, v in pairs(settings[zone]) do
-				if v == val_str then
-					settings[zone][k] = nil
-					found = true
-					break
-				end
-			end
-			if found then
-				-- Rebuild the table to eliminate gaps
-				local newTable = {}
-				for _, v in pairs(settings[zone]) do
-					table.insert(newTable, v)
-				end
-				-- Clear the existing table
-				for k in pairs(settings[zone]) do
-					settings[zone][k] = nil
-				end
-				-- Repopulate the table with renumbered spawns
-				for i, v in ipairs(newTable) do
-					settings[zone]['Spawn' .. i] = v
-				end
-				save_settings()
-				Module.Utils.PrintOutput('AlertMaster', nil, '\ayRemoved spawn alert for ' .. val_str .. ' in ' .. zone)
-			else
-				Module.Utils.PrintOutput('AlertMaster', nil, '\aySpawn alert for ' .. val_str .. ' not found in ' .. zone)
-			end
+			-- local found = false
+			-- for k, v in pairs(settings[zone]) do
+			-- 	if v == val_str then
+			-- 		settings[zone][k] = nil
+			-- 		found = true
+			-- 		break
+			-- 	end
+			-- end
+			-- if found then
+			-- 	-- Rebuild the table to eliminate gaps
+			-- 	local newTable = {}
+			-- 	for _, v in pairs(settings[zone]) do
+			-- 		table.insert(newTable, v)
+			-- 	end
+			-- 	-- Clear the existing table
+			-- 	for k in pairs(settings[zone]) do
+			-- 		settings[zone][k] = nil
+			-- 	end
+			-- 	-- Repopulate the table with renumbered spawns
+			-- 	for i, v in ipairs(newTable) do
+			-- 		settings[zone]['Spawn' .. i] = v
+			-- 	end
+			-- 	save_settings()
+			-- 	Module.Utils.PrintOutput('AlertMaster', nil, '\ayRemoved spawn alert for ' .. val_str .. ' in ' .. zone)
+			-- else
+			-- 	Module.Utils.PrintOutput('AlertMaster', nil, '\aySpawn alert for ' .. val_str .. ' not found in ' .. zone)
+			-- end
 		elseif cmd == 'spawnlist' then
 			-- if sCount > 0 then
 			Module.Utils.PrintOutput('AlertMaster', nil, '\aySpawn Alerts (\a-t' .. zone .. '\ax): ')
@@ -2332,36 +2836,52 @@ local function load_binds()
 		-- adding/removing/listing ignored pcs
 		local ignoreCount = 0
 		if cmd == 'ignoreadd' and val_str:len() > 0 then
-			-- if the section doesn't exist in ini yet, create a new table
-			if settings['Ignore'] == nil then settings['Ignore'] = {} end
-			-- if the section does exist in the ini, spin over entries and make sure we aren't duplicating
-			for k, v in pairs(settings['Ignore']) do
-				if settings['Ignore'][k] == val_str then
-					Module.Utils.PrintOutput('AlertMaster', nil, '\ayAlready ignoring \"' .. val_str .. '\".')
-					return
-				end
-				ignoreCount = ignoreCount + 1
+			-- -- if the section doesn't exist in ini yet, create a new table
+			-- if settings['Ignore'] == nil then settings['Ignore'] = {} end
+			-- -- if the section does exist in the ini, spin over entries and make sure we aren't duplicating
+			-- for k, v in pairs(settings['Ignore']) do
+			-- 	if settings['Ignore'][k] == val_str then
+			-- 		Module.Utils.PrintOutput('AlertMaster', nil, '\ayAlready ignoring \"' .. val_str .. '\".')
+			-- 		return
+			-- 	end
+			-- 	ignoreCount = ignoreCount + 1
+			-- end
+			-- -- if we made it this far, the command is new -- add it to the table and store to ini
+			-- settings['Ignore']['Ignore' .. ignoreCount + 1] = val_str
+			-- save_settings()
+			local result = Module:AddIgnorePCtoDB(val_str)
+
+			if result then
+				Module.Utils.PrintOutput('AlertMaster', nil, '\ayNow ignoring \"' .. val_str .. '\"')
+			else
+				Module.Utils.PrintOutput('AlertMaster', nil, '\ayAlready ignoring \"' .. val_str .. '\".')
 			end
-			-- if we made it this far, the command is new -- add it to the table and store to ini
-			settings['Ignore']['Ignore' .. ignoreCount + 1] = val_str
-			save_settings()
-			Module.Utils.PrintOutput('AlertMaster', nil, '\ayNow ignoring \"' .. val_str .. '\"')
+
+			-- Module.Utils.PrintOutput('AlertMaster', nil, '\ayNow ignoring \"' .. val_str .. '\"')
 		elseif cmd == 'ignoredel' and val_str:len() > 0 then
 			-- remove from the ini
-			for k, v in pairs(settings['Ignore']) do
-				if settings['Ignore'][k] == val_str then settings['Ignore'][k] = nil end
-			end
-			save_settings()
-			Module.Utils.PrintOutput('AlertMaster', nil, '\ayNo longer ignoring \"' .. val_str .. '\"')
-		elseif cmd == 'ignorelist' then
-			if ignoreCount > 0 then
-				Module.Utils.PrintOutput('AlertMaster', nil, '\ayIgnore List (\a-t' .. Module.CharLoaded .. '\ax): ')
-				for k, v in pairs(settings['Ignore']) do
-					Module.Utils.PrintOutput('AlertMaster', nil, '\t\a-t' .. k .. ' - ' .. v)
-				end
+			-- for k, v in pairs(settings['Ignore']) do
+			-- 	if settings['Ignore'][k] == val_str then settings['Ignore'][k] = nil end
+			-- end
+			-- save_settings()
+			local result = Module:RemoveIgnoredPC(val_str)
+			if result then
+				Module.Utils.PrintOutput('AlertMaster', nil, '\ayNo longer ignoring \"' .. val_str .. '\"')
 			else
-				Module.Utils.PrintOutput('AlertMaster', nil, '\ayIgnore List (\a-t' .. Module.CharLoaded .. '\ax): No ignore list configured.')
+				Module.Utils.PrintOutput('AlertMaster', nil, '\ay\"' .. val_str .. '\" was not being ignored.')
 			end
+			-- Module.Utils.PrintOutput('AlertMaster', nil, '\ayNo longer ignoring \"' .. val_str .. '\"')
+		elseif cmd == 'ignorelist' then
+			-- if ignoreCount > 0 then
+			Module.Utils.PrintOutput('AlertMaster', nil, '\ayIgnore List (\a-t' .. Module.CharLoaded .. '\ax): ')
+			for _, v in ipairs(settings['Ignore']) do
+				if v ~= nil then
+					Module.Utils.PrintOutput('AlertMaster', nil, '\t\a-t' .. _ .. ' - ' .. v)
+				end
+			end
+			-- else
+			-- 	Module.Utils.PrintOutput('AlertMaster', nil, '\ayIgnore List (\a-t' .. Module.CharLoaded .. '\ax): No ignore list configured.')
+			-- end
 		end
 		-- Announce Alerts
 		if cmd == 'announce' and val_str == 'on' then
@@ -2440,6 +2960,8 @@ end
 
 function Module.Unload()
 	mq.unbind('/alertmaster')
+	mq.RemoveTopLevelObject('AlertMaster')
+
 	-- mq.unbind('/am')
 end
 
@@ -2449,10 +2971,11 @@ local function setup()
 	radius = arg[1] or 200
 	zradius = arg[2] or 100
 	currZone = mq.TLO.Zone.ID()
-	lastZone = currZone
+	lastZone = mq.TLO.Zone.ID()
 	if mq.TLO.Plugin('mq2eqbc').IsLoaded() then groupCmd = '/bcaa /' end
 	load_settings()
 	load_binds()
+	Module:MessageHandler()
 	-- Kickstart the data
 	Module.GUI_Main.Refresh.Table.Rules = true
 	Module.GUI_Main.Refresh.Table.Filtered = true
@@ -2464,38 +2987,81 @@ local function setup()
 	print_status()
 	RefreshZone()
 	Module.IsRunning = true
+	check_for_pcs()
+	check_for_gms()
+	check_for_announce()
+	check_for_spawns()
 	if not loadedExeternally then
 		mq.imgui.init(Module.Name, Module.RenderGUI)
 		Module.LocalLoop()
 	end
 end
 
+---@class AlertMasterDataType
+---@field IsNamed boolean
+---@field IsActive boolean
+---@type DataType
+local alertMasterDataType = mq.DataType.new('AlertMaster', {
+	Members = {
+		IsNamed = function(param, self)
+			if param and param:len() > 0 then
+				return 'bool', isSpawnInAlerts(param, spawnAlerts) or false
+			end
+			return 'bool', false
+		end,
+
+		IsActive = function(param, self)
+			return 'bool', active
+		end,
+	},
+	ToString = function(self)
+		return 'AlertMaster'
+	end,
+})
+
+function AlertMasterTLOHandler(param)
+	return alertMasterDataType, active
+end
+
+mq.AddTopLevelObject('AlertMaster', AlertMasterTLOHandler)
+
 local cTime = os.time()
 local firstRun = true
 function Module.MainLoop()
 	-- while true do
+	local needUpdate = false
+	currZone = mq.TLO.Zone.ID()
 	if currZone ~= lastZone then
 		numAlerts = 0
 		RefreshZone()
-		lastZone = currZone
-	end
-	if loadedExeternally then
-		---@diagnostic disable-next-line: undefined-global
-		if not MyUI_LoadModules.CheckRunning(Module.IsRunning, Module.Name) then return end
+		lastZone = mq.TLO.Zone.ID()
+		needUpdate = check_for_zone_change()
 	end
 
-	if not loadedExeternally or os.time() - cTime > delay or firstRun then
+	if loadedExeternally then
+		---@diagnostic disable-next-line: undefined-global
+		if not MyUI_LoadModules.CheckRunning(Module.IsRunning, Module.Name) then
+			mq.RemoveTopLevelObject('AlertMaster')
+			mq.unbind('/alertmaster')
+			return
+		end
+	end
+
+
+	if not loadedExeternally or os.time() - cTime > delay or firstRun or needUpdate then
 		if mq.TLO.Window('CharacterListWnd').Open() then return false end
 		currZone = mq.TLO.Zone.ID()
 		Module.Guild = mq.TLO.Me.Guild() or 'NoGuild'
-
-		check_for_zone_change()
-		check_for_spawns() -- always refresh spawn list and only alert if not a safe zone.(checked later in the function)
-		if check_safe_zone() ~= true then
-			check_for_gms()
-			check_for_announce()
-			check_for_pcs()
-
+		check_for_pcs()
+		check_for_gms()
+		check_for_announce()
+		check_for_spawns()
+		local db = Module:OpenDB()
+		settings.Ignore = Module:GetIgnoredPlayers(db)
+		settings.SafeZones = Module:GetSafeZones(db)
+		if db then db:close() end
+		-- always refresh spawn list and only alert if not a safe zone.(checked later in the function)
+		if not check_safe_zone() then
 			if ((os.time() - alertTime) > (remindNPC * 60) and numAlerts > 0) then -- if we're past the alert remindnpc time and we have alerts to give
 				-- do text alerts
 				for _, v in pairs(tSpawns) do
@@ -2528,6 +3094,7 @@ function Module.MainLoop()
 		end
 		cTime = os.time()
 		firstRun = false
+		needUpdate = false
 	end
 
 	if playing and playTime > 0 then
@@ -2540,6 +3107,22 @@ function Module.MainLoop()
 	if not playing and playTime == 0 then
 		-- we aren't playing anything so we can double check the original voulme wasn't changed by the user.
 		originalVolume = getVolume()
+	end
+
+	if Module.TempSettings.SendNamed then
+		local db = Module:OpenDB()
+
+		if amActor ~= nil then
+			amActor:send({ mailbox = Module.TempSettings.ReplyTo, absolute_mailbox = true, }, {
+				Who = Module.CharLoaded,
+				NamedList = Module:GetSpawns(Module.TempSettings.NamedZone, db) or {},
+			})
+		end
+		Module.TempSettings.SendNamed = false
+		Module.TempSettings.ReplyTo = nil
+		Module.TempSettings.NamedZone = nil
+
+		if db then db:close() end
 	end
 
 	if Module.GUI_Main.Refresh.Table.Unhandled then RefreshUnhandled() end
@@ -2555,6 +3138,8 @@ function Module.LocalLoop()
 		Module.MainLoop()
 		mq.delay(delay .. 's')
 	end
+	mq.unbind('/alertmaster')
+	mq.RemoveTopLevelObject('AlertMaster')
 end
 
 setup()

@@ -83,15 +83,15 @@ function CommonUtils.DrawStatusIcon(iconID, type, txt, iconSize)
 end
 
 CommonUtils.ImGuiToggleFlags = {
-	None           = 0,
-	StarKnob       = bit32.lshift(1, 0),
-	RightLabel     = bit32.lshift(1, 1),
-	AnimateKnob    = bit32.lshift(1, 2),
-	SmilyKnob      = bit32.lshift(1, 3),
-	GlowOnHover    = bit32.lshift(1, 4),
-	AnimateOnHover = bit32.lshift(1, 5),
-	PulseOnHover   = bit32.lshift(1, 6),
-	KnobBorder     = bit32.lshift(1, 7),
+	None           = 0,               -- No flags set
+	StarKnob       = bit32.lshift(1, 0), -- Uses Star and Moon shapes for the knob Star being enabled and Moon being disabled
+	RightLabel     = bit32.lshift(1, 1), -- Draw the Label on the right side of the toggle instead of the left
+	AnimateKnob    = bit32.lshift(1, 2), -- Animate the knob (spinning star or rocking moon)
+	SmilyKnob      = bit32.lshift(1, 3), -- Uses a smiley or frown face for the knob based on the value (true = smiley, false = frown)
+	GlowOnHover    = bit32.lshift(1, 4), -- Glow the knob on hover
+	AnimateOnHover = bit32.lshift(1, 5), -- Animate the knob on hover (spinning star or rocking moon)
+	PulseOnHover   = bit32.lshift(1, 6), -- Pulse the knob on hover (breathing effect)
+	KnobBorder     = bit32.lshift(1, 7), -- Draw a black border around the knob
 }
 
 ---@param draw_list ImDrawList Draw list to draw from
@@ -138,44 +138,6 @@ function CommonUtils.RenderStar(draw_list, pos, size, star_color, rotation, num_
 		draw_list:AddConvexPolyFilled(rotated_triangle, star_color)
 	end
 end
-
--- ---@param draw_list ImDrawList Draw list to draw from
--- ---@param pos ImVec2 Position to start from (top-left corner of the star)
--- ---@param size number Diameter of the star's outer points as a circle
--- ---@param star_color ImU32 Color as ImU32
--- ---@param rotation number Rotation in radians (optional)
--- ---@param num_points integer Number of points to draw (default 5)
--- ---@param border boolean Optional border flag (default false)
--- function CommonUtils.RenderStar(draw_list, pos, size, star_color, rotation, num_points, border)
--- 	num_points = num_points or 5
--- 	rotation = rotation or 0
--- 	if num_points < 2 then num_points = 2 end
-
--- 	local outer_radius = size * 0.5
--- 	local inner_radius = outer_radius * 0.5
--- 	local center = ImVec2(pos.x + outer_radius, pos.y + outer_radius)
--- 	local angle_step = math.pi / num_points -- half the points are inner
--- 	local points = {}
-
--- 	local function polarToVec2(angleRad, distance)
--- 		return ImVec2(
--- 			center.x + math.cos(angleRad) * distance,
--- 			center.y + math.sin(angleRad) * distance
--- 		)
--- 	end
-
--- 	for i = 0, num_points * 2 - 1 do
--- 		local angle = rotation + (i * angle_step)
--- 		local radius = (i % 2 == 0) and outer_radius or inner_radius
--- 		table.insert(points, polarToVec2(angle, radius))
--- 	end
-
--- 	if border then
--- 		draw_list:AddCircle(center, outer_radius, ImGui.GetColorU32(0.1, 0.1, 0.1, 0.4), 32, 2)
--- 	end
-
--- 	draw_list:AddConvexPolyFilled(points, star_color)
--- end
 
 ---@param draw_list ImDrawList to draw to
 ---@param pos ImVec2 Top-left position (of moon)
@@ -567,6 +529,35 @@ function CommonUtils.GetBreathingColor(base_color, do_breathe)
 	return ImVec4(r, g, b, a)
 end
 
+---Draw Text with Drop Shadow effects
+---@param str any
+---@param options table|nil # options Optional parameters: Enabled, Opacity, OffsetX, OffsetY
+---@param shadCol ImVec4|nil Shadow Color
+---@param txtCol ImVec4|nil Text Color
+function CommonUtils.DropShadow(str, options, shadCol, txtCol)
+	options                 = options or {}
+	local enabled           = options.Enabled ~= false and options.Enabled or false
+	local opacity           = options.Opacity or 0.5
+	local shadowColor       = shadCol or CommonUtils.Colors.color('black')
+	local offsetX           = options.OffsetX or 2
+	local offsetY           = options.OffsetY or 2
+	local shadowWithOpacity = ImVec4(shadowColor.x, shadowColor.y, shadowColor.z, opacity)
+
+	if enabled then
+		local cursorX, cursorY = ImGui.GetCursorPos()
+		ImGui.SetCursorPosX(cursorX + offsetX)
+		ImGui.SetCursorPosY(cursorY + offsetY)
+		ImGui.TextColored(shadowWithOpacity, str)
+		ImGui.SetCursorPosX(cursorX)
+		ImGui.SetCursorPosY(cursorY)
+	end
+	if txtCol ~= nil then
+		ImGui.TextColored(txtCol, str)
+	else
+		ImGui.Text(str)
+	end
+end
+
 ---@param spawn MQSpawn
 function CommonUtils.GetConColor(spawn)
 	local conColor = string.lower(spawn.ConColor()) or 'WHITE'
@@ -724,16 +715,21 @@ end
 ---@param default_settings table  the default settings table
 ---@param loaded_settings table  the loaded settings table
 ---@return boolean  returns true if a new setting was found
+---@return table  returns the new loaded settings table with any new settings added
 function CommonUtils.CheckDefaultSettings(default_settings, loaded_settings)
 	local newSetting = false
+	local newTable = {}
 	for setting, value in pairs(default_settings or {}) do
 		if loaded_settings[setting] == nil then
 			CommonUtils.PrintOutput('MyUI', nil, "\ayNew Default Setting: \ao%s \ayAdding it to the Settings File.", setting)
 			loaded_settings[setting] = value
+			newTable[setting] = value -- Add the new setting to the loaded settings table
 			newSetting = true
+		else
+			newTable[setting] = loaded_settings[setting] -- Keep the existing setting
 		end
 	end
-	return newSetting
+	return newSetting, newTable
 end
 
 -- Function to append colored text segments
@@ -763,9 +759,13 @@ end
 
 function CommonUtils.GiveItem(target_id)
 	if target_id == nil then return end
-	mq.cmdf("/target id %s", target_id)
+	-- mq.cmdf("/target id %s", target_id)
+	mq.TLO.Spawn(target_id).DoTarget()
 	if mq.TLO.Cursor() or mq.TLO.Me.CursorPlatinum() > 0 or mq.TLO.Me.CursorGold() > 0 or mq.TLO.Me.CursorSilver() > 0 or mq.TLO.Me.CursorCopper() > 0 then
-		mq.cmdf('/multiline ; /tar id %s; /timed 5, /click left target', target_id)
+		mq.TLO.Spawn(target_id).LeftClick()
+	else
+		mq.cmdf("/target id %s", target_id)
+		mq.cmd("/autoinventory")
 	end
 end
 
@@ -841,15 +841,6 @@ function CommonUtils.getRelativeDirection(spawnDir)
 	return difference
 end
 
--- function CommonUtils.RotatePoint(p, cx, cy, degAngle)
--- 	local radians = math.rad(degAngle)
--- 	local cosA = math.cos(radians)
--- 	local sinA = math.sin(radians)
--- 	local newX = cosA * (p.x - cx) - sinA * (p.y - cy) + cx
--- 	local newY = sinA * (p.x - cx) + cosA * (p.y - cy) + cy
--- 	return ImVec2(newX, newY)
--- end
-
 --- Function to rotate aa point around a center point by a given angle
 ---@param point ImVec2 Point Coordinates
 ---@param center ImVec2 Center Coordinates to rotate around
@@ -866,6 +857,12 @@ function CommonUtils.RotatePoint(point, center, angle)
 	)
 end
 
+---comment
+---@param topPoint ImVec2 x,y coordinates of the top point of the arrow
+---@param width number base width of the arrow
+---@param height number height of the arrow
+---@param color ImVec4 color of the arrow
+---@param angle number angle in radians to rotate the arrow
 function CommonUtils.DrawArrow(topPoint, width, height, color, angle)
 	local draw_list = ImGui.GetWindowDrawList()
 	local p1 = ImVec2(topPoint.x, topPoint.y)

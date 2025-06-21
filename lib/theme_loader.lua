@@ -50,6 +50,11 @@ function LoadTheme.StartTheme(tName, tTable, mouseOver, mouseHovered, mouseOvaer
 	local StyleCounter = 0
 	local ColorCounter = 0
 	local themeID = 0
+	if not tTable then return StyleCounter, ColorCounter, themeID end
+	if type(tTable) ~= 'table' then
+		print("Theme Table is not a table, returning 0 Style and Color counts.")
+		return StyleCounter, ColorCounter, themeID
+	end
 	if tTable.Theme == nil then
 		return StyleCounter, ColorCounter, themeID
 	end
