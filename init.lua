@@ -49,7 +49,7 @@ if not loadedExeternally then
 	Module.Server      = mq.TLO.EverQuest.Server()
 	Module.Build       = mq.TLO.MacroQuest.BuildName()
 	Module.PackageMan  = require('mq.PackageMan')
-	Module.SQLite3     = require('lsqlite3')
+	Module.SQLite3     = Module.PackageMan.Require('lsqlite3')
 	Module.Actors      = require('actors')
 else
 	Module.Utils = MyUI_Utils
